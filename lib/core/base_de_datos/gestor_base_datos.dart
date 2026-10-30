@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -14,6 +15,10 @@ class GestorBaseDatos {
   
   // Instancia Singleton
   static final GestorBaseDatos instancia = GestorBaseDatos._();
+
+  /// Reemplaza la base por una abierta desde afuera (solo para tests).
+  @visibleForTesting
+  static void usarBaseDePrueba(Database? db) => _instancia = db;
 
   /// Obtiene la instancia de la base de datos, inicializándola si es necesario.
   Future<Database> obtenerBaseDatos() async {
