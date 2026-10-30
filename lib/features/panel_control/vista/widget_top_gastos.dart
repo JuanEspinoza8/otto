@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
 import '../logica/dashboard_provider.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../../categorias/modelo/categoria.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Widget que muestra el Top 3 de gastos del mes con barras de progreso.
 class WidgetTopGastos extends ConsumerWidget {
@@ -56,7 +56,7 @@ class WidgetTopGastos extends ConsumerWidget {
                       Icon(Icons.category, size: 16, color: Color(int.parse(cat.colorHex))),
                       const SizedBox(width: 8),
                       Expanded(child: Text(nombre, style: TextStyle(fontWeight: FontWeight.bold, color: context.colores.textoPrimario))),
-                      Text('\$${NumberFormat('#,##0.##', 'es_AR').format(e.value)}', style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold)),
+                      Text(Dinero.desdeUnidades(e.value).formatear(), style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const SizedBox(height: 4),

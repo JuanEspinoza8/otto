@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/ui/widgets/mascota_otto.dart';
 import '../logica/metas_provider.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import 'dialogo_nueva_meta.dart';
 import 'dialogo_acciones_meta.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Widget que muestra las metas de ahorro con la mascota Monedita y progreso.
 class WidgetMetas extends ConsumerWidget {
@@ -83,7 +83,7 @@ class WidgetMetas extends ConsumerWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Ahorraste \$${NumberFormat('#,##0.##', 'es_AR').format(montoActual)}',
+                                'Ahorraste ${Dinero.desdeUnidades(montoActual).formatear()}',
                                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colores.textoPrimario),
                               ),
                               Text(
@@ -196,7 +196,7 @@ class _TarjetaSubmeta extends StatelessWidget {
     if (monto >= 1000) {
       return '$simbolo${(monto / 1000).toStringAsFixed(0)}K';
     }
-    return '$simbolo${NumberFormat('#,##0.##', 'es_AR').format(monto)}';
+    return '$simbolo${Dinero.desdeUnidades(monto).formatear(simbolo: false)}';
   }
 
   @override

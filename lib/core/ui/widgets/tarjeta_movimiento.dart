@@ -5,6 +5,7 @@ import '../../utilidades/mapeador_iconos.dart';
 import '../../../features/movimientos/modelo/movimiento.dart';
 import '../../../features/movimientos/vista/dialogo_editar_movimiento.dart';
 import '../../../features/categorias/modelo/categoria.dart';
+import '../../../core/dinero/dinero.dart';
 
 class TarjetaMovimiento extends StatelessWidget {
   final Movimiento movimiento;
@@ -23,7 +24,7 @@ class TarjetaMovimiento extends StatelessWidget {
     // Formatear monto según regla de moneda en Argentina (sin decimales para
     // que montos grandes no desborden la tarjeta).
     // "$" adelante (consistente con el resto) y hasta 2 decimales si los tiene.
-    final montoFormateado = '\$${NumberFormat('#,##0.##', 'es_AR').format(movimiento.monto)}';
+    final montoFormateado = Dinero.desdeUnidades(movimiento.monto).formatear();
     final esIngreso = movimiento.tipo == 'ingreso';
     final esAhorro = movimiento.tipo == 'ahorro';
     // Color e ícono del monto: verde ingreso, azul ahorro, rojo gasto.

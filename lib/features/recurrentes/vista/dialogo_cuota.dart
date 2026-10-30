@@ -3,10 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../logica/cuotas_provider.dart';
 import '../modelo/cuota.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Diálogo para crear o editar una cuota en pago.
 class DialogoCuota extends ConsumerStatefulWidget {
@@ -37,7 +38,7 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
     super.initState();
     final c = widget.aEditar;
     _nombre = TextEditingController(text: c?.nombre ?? '');
-    _monto = TextEditingController(text: montoEditable(c?.montoCuota ?? 0));
+    _monto = TextEditingController(text: Dinero.desdeUnidades(c?.montoCuota ?? 0).textoEditable);
     _total = TextEditingController(text: c != null ? c.totalCuotas.toString() : '');
     _pagadas = TextEditingController(text: c != null ? c.cuotasPagadas.toString() : '0');
     _categoriaId = c?.categoriaId;
@@ -55,7 +56,7 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
 
   Future<void> _guardar() async {
     final nombre = _nombre.text.trim();
-    final monto = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final monto = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     final total = int.tryParse(_total.text) ?? 0;
     final pagadas = int.tryParse(_pagadas.text) ?? 0;
 
@@ -116,7 +117,7 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
             TextField(
               controller: _monto,
               keyboardType: TextInputType.number,
-              inputFormatters: [FormateadorMiles()],
+              inputFormatters: [FormateadorMonto()],
               style: TextStyle(color: context.colores.textoPrimario),
               decoration: const InputDecoration(prefixText: '\$ ', hintText: 'Monto de cada cuota'),
             ),

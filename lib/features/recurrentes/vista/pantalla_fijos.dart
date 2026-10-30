@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../logica/gastos_fijos_provider.dart';
 import '../modelo/gasto_fijo.dart';
 import 'dialogo_gasto_fijo.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Pantalla de gestión de gastos fijos mensuales.
 class PantallaFijos extends ConsumerWidget {
@@ -14,7 +14,6 @@ class PantallaFijos extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final fijosAsync = ref.watch(gastosFijosControladorProvider);
-    final formato = NumberFormat('#,##0.##', 'es_AR');
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
@@ -54,12 +53,12 @@ class PantallaFijos extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Total fijo mensual', style: TextStyle(color: context.colores.textoSecundario, fontWeight: FontWeight.bold)),
-                    Text('\$${formato.format(totalActivo)}', style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text(Dinero.desdeUnidades(totalActivo).formatear(), style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 18)),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              ...fijos.map((f) => _TarjetaFijo(fijo: f, formato: formato)),
+              ...fijos.map((f) => _TarjetaFijo(fijo: f)),
               const SizedBox(height: 80),
             ],
           );
@@ -71,8 +70,7 @@ class PantallaFijos extends ConsumerWidget {
 
 class _TarjetaFijo extends ConsumerWidget {
   final GastoFijo fijo;
-  final NumberFormat formato;
-  const _TarjetaFijo({required this.fijo, required this.formato});
+  const _TarjetaFijo({required this.fijo});
 
   Future<void> _confirmarEliminar(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
@@ -106,7 +104,7 @@ class _TarjetaFijo extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(fijo.nombre, style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('\$${formato.format(fijo.monto)} · se debita el día ${fijo.diaDebito}', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
+                Text('${Dinero.desdeUnidades(fijo.monto).formatear()} · se debita el día ${fijo.diaDebito}', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
               ],
             ),
           ),

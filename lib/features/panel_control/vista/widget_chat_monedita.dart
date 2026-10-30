@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/ui/widgets/mascota_otto.dart';
 import '../logica/monedita_provider.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../../categorias/modelo/categoria.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Widget del chat inteligente "Decile a Otto".
 /// Interpreta gastos/ingresos en lenguaje natural (uno o varios por frase).
@@ -202,7 +202,6 @@ class _TarjetaPropuestaState extends ConsumerState<_TarjetaPropuesta> {
     final s = p.sugerencia;
     final esGasto = s.tipo == 'gasto';
     final colorTipo = esGasto ? TemaApp.rojo : TemaApp.verde;
-    final formato = NumberFormat('#,##0.##', 'es_AR');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -227,7 +226,7 @@ class _TarjetaPropuestaState extends ConsumerState<_TarjetaPropuesta> {
                 child: FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text('\$${formato.format(s.monto)}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
+                  child: Text(Dinero.desdeUnidades(s.monto).formatear(), style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
                 ),
               ),
             ],
@@ -258,8 +257,8 @@ class _TarjetaPropuestaState extends ConsumerState<_TarjetaPropuesta> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'El fijo "${p.fijo!.nombre}" figuraba \$${formato.format(p.fijo!.monto)}.'
-                    '${p.yaAplicadoEsteMes ? ' Ya se descontó este mes: se corrige a \$${formato.format(s.monto)}.' : ''}',
+                    'El fijo "${p.fijo!.nombre}" figuraba ${Dinero.desdeUnidades(p.fijo!.monto).formatear()}.'
+                    '${p.yaAplicadoEsteMes ? ' Ya se descontó este mes: se corrige a ${Dinero.desdeUnidades(s.monto).formatear()}.' : ''}',
                     style: const TextStyle(fontSize: 11, color: TemaApp.azul),
                   ),
                   Row(
@@ -270,7 +269,7 @@ class _TarjetaPropuestaState extends ConsumerState<_TarjetaPropuesta> {
                         visualDensity: VisualDensity.compact,
                         activeColor: TemaApp.azul,
                       ),
-                      Expanded(child: Text('Actualizar el fijo a \$${formato.format(s.monto)} (para los próximos meses)', style: TextStyle(fontSize: 11, color: context.colores.textoSecundario))),
+                      Expanded(child: Text('Actualizar el fijo a ${Dinero.desdeUnidades(s.monto).formatear()} (para los próximos meses)', style: TextStyle(fontSize: 11, color: context.colores.textoSecundario))),
                     ],
                   ),
                 ],

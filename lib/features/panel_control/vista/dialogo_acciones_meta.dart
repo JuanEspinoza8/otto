@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import '../logica/dolar_blue_provider.dart';
 import '../logica/metas_provider.dart';
 import '../modelo/meta.dart';
 import 'dialogo_aportar_meta.dart';
 import 'dialogo_nueva_meta.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Menú de acciones de una meta: aportar, retirar, mover, editar y eliminar.
 class DialogoAccionesMeta extends ConsumerWidget {
@@ -27,7 +27,6 @@ class DialogoAccionesMeta extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final f = NumberFormat('#,##0.##', 'es_AR');
     final simbolo = meta.esUsd ? 'U\$D' : '\$';
     final otrasMetas = (ref.watch(metasControladorProvider).valueOrNull ?? {}).keys.where((m) => m.id != meta.id).toList();
 
@@ -39,7 +38,7 @@ class DialogoAccionesMeta extends ConsumerWidget {
             leading: Icon(MapeadorIconos.obtenerIcono(meta.icono), color: TemaApp.azul),
             title: Text(meta.nombre, style: TextStyle(fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
             subtitle: Text(
-              '$simbolo${f.format(meta.montoActual)} de $simbolo${f.format(meta.montoObjetivo)} · ${meta.porcentajeProgreso.toInt()}%',
+              '$simbolo${Dinero.desdeUnidades(meta.montoActual).formatear(simbolo: false)} de $simbolo${Dinero.desdeUnidades(meta.montoObjetivo).formatear(simbolo: false)} · ${meta.porcentajeProgreso.toInt()}%',
               style: TextStyle(color: context.colores.textoSecundario),
             ),
           ),
@@ -116,7 +115,6 @@ class DialogoRetirarMeta extends ConsumerStatefulWidget {
 
 class _DialogoRetirarMetaState extends ConsumerState<DialogoRetirarMeta> {
   final _monto = TextEditingController();
-  final _f = NumberFormat('#,##0.##', 'es_AR');
 
   @override
   void dispose() {
@@ -126,7 +124,7 @@ class _DialogoRetirarMetaState extends ConsumerState<DialogoRetirarMeta> {
 
   Future<void> _retirar() async {
     final meta = widget.meta;
-    final valor = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final valor = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     if (valor <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresá cuánto querés retirar')));
       return;
@@ -146,13 +144,13 @@ class _DialogoRetirarMetaState extends ConsumerState<DialogoRetirarMeta> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Tenés guardado $simbolo${_f.format(meta.montoActual)}. Lo que retires vuelve a tu disponible.',
+          Text('Tenés guardado $simbolo${Dinero.desdeUnidades(meta.montoActual).formatear(simbolo: false)}. Lo que retires vuelve a tu disponible.',
               style: TextStyle(color: context.colores.textoSecundario, fontSize: 13)),
           const SizedBox(height: 12),
           TextField(
             controller: _monto,
             keyboardType: TextInputType.number,
-            inputFormatters: [FormateadorMiles()],
+            inputFormatters: [FormateadorMonto()],
             style: TextStyle(color: context.colores.textoPrimario),
             decoration: InputDecoration(prefixText: '$simbolo ', hintText: 'Monto a retirar'),
           ),
@@ -160,8 +158,8 @@ class _DialogoRetirarMetaState extends ConsumerState<DialogoRetirarMeta> {
           Align(
             alignment: Alignment.centerLeft,
             child: ActionChip(
-              label: Text('Retirar todo ($simbolo${_f.format(meta.montoActual)})'),
-              onPressed: () => setState(() => _monto.text = montoEditable(meta.montoActual)),
+              label: Text('Retirar todo ($simbolo${Dinero.desdeUnidades(meta.montoActual).formatear(simbolo: false)})'),
+              onPressed: () => setState(() => _monto.text = Dinero.desdeUnidades(meta.montoActual).textoEditable),
             ),
           ),
         ],
@@ -193,7 +191,6 @@ class DialogoMoverMeta extends ConsumerStatefulWidget {
 class _DialogoMoverMetaState extends ConsumerState<DialogoMoverMeta> {
   Meta? _destino;
   final _monto = TextEditingController();
-  final _f = NumberFormat('#,##0.##', 'es_AR');
 
   @override
   void dispose() {
@@ -207,7 +204,7 @@ class _DialogoMoverMetaState extends ConsumerState<DialogoMoverMeta> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Elegí la meta destino')));
       return;
     }
-    final pesos = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final pesos = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     if (pesos <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresá cuánto mover')));
       return;
@@ -240,7 +237,7 @@ class _DialogoMoverMetaState extends ConsumerState<DialogoMoverMeta> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Disponible para mover: \$${_f.format(disponibleOrigenPesos)}',
+          Text('Disponible para mover: ${Dinero.desdeUnidades(disponibleOrigenPesos).formatear()}',
               style: TextStyle(color: context.colores.textoSecundario, fontSize: 13)),
           const SizedBox(height: 12),
           DropdownButtonFormField<int>(
@@ -254,7 +251,7 @@ class _DialogoMoverMetaState extends ConsumerState<DialogoMoverMeta> {
           TextField(
             controller: _monto,
             keyboardType: TextInputType.number,
-            inputFormatters: [FormateadorMiles()],
+            inputFormatters: [FormateadorMonto()],
             style: TextStyle(color: context.colores.textoPrimario),
             decoration: const InputDecoration(prefixText: '\$ ', hintText: 'Monto en pesos a mover'),
           ),

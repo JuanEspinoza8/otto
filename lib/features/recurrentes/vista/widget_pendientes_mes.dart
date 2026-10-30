@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../logica/pendientes_provider.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Tarjeta del dashboard que lista los movimientos recurrentes pendientes de
 /// confirmar para el mes seleccionado (sueldo, gastos fijos y cuotas).
@@ -17,7 +17,6 @@ class WidgetPendientesMes extends ConsumerWidget {
 
     if (pendientes.isEmpty) return const SizedBox.shrink();
 
-    final formato = NumberFormat('#,##0.##', 'es_AR');
     final notifier = ref.read(pendientesMesProvider.notifier);
 
     return Container(
@@ -59,7 +58,7 @@ class WidgetPendientesMes extends ConsumerWidget {
                       child: Text(p.nombre, style: TextStyle(color: context.colores.textoPrimario, fontSize: 13)),
                     ),
                     Text(
-                      '${p.esIngreso ? '+' : '-'}\$${formato.format(p.monto)}',
+                      '${p.esIngreso ? '+' : '-'}${Dinero.desdeUnidades(p.monto).formatear()}',
                       style: TextStyle(
                         color: p.esIngreso ? TemaApp.verde : TemaApp.rojo,
                         fontWeight: FontWeight.bold,

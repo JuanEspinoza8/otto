@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../logica/ahorros_provider.dart';
 import '../logica/dolar_blue_provider.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Widget que muestra los ahorros acumulados (ARS + USD) con
 /// conversión en tiempo real usando el dólar blue.
@@ -47,7 +47,7 @@ class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulado
         // Sincronizar controladores si no estamos editando
         if (!_editandoArs) {
           final textoArs = ahorros.ahorroPrevioArs > 0
-              ? NumberFormat('#,##0.##', 'es_AR').format(ahorros.ahorroPrevioArs)
+              ? Dinero.desdeUnidades(ahorros.ahorroPrevioArs).formatear(simbolo: false)
               : '';
           if (_controladorArs.text != textoArs) {
             _controladorArs.text = textoArs;
@@ -55,7 +55,7 @@ class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulado
         }
         if (!_editandoUsd) {
           final textoUsd = ahorros.ahorroPrevioUsd > 0
-              ? NumberFormat('#,##0.##', 'es_AR').format(ahorros.ahorroPrevioUsd)
+              ? Dinero.desdeUnidades(ahorros.ahorroPrevioUsd).formatear(simbolo: false)
               : '';
           if (_controladorUsd.text != textoUsd) {
             _controladorUsd.text = textoUsd;
@@ -94,19 +94,17 @@ class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulado
                         TextField(
                           controller: _controladorArs,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FormateadorMiles()],
+                          inputFormatters: [FormateadorMonto()],
                           onTap: () => setState(() => _editandoArs = true),
                           onSubmitted: (valor) {
                             _editandoArs = false;
-                            final monto = double.tryParse(valor.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+                            final monto = (Dinero.parsear(valor)?.unidades ?? 0);
                             ref.read(ahorrosControladorProvider.notifier).actualizarArs(monto);
                           },
                           onTapOutside: (_) {
                             if (_editandoArs) {
                               _editandoArs = false;
-                              final monto = double.tryParse(
-                                _controladorArs.text.replaceAll('.', '').replaceAll(',', '.'),
-                              ) ?? 0;
+                              final monto = (Dinero.parsear(_controladorArs.text)?.unidades ?? 0);
                               ref.read(ahorrosControladorProvider.notifier).actualizarArs(monto);
                             }
                           },
@@ -132,19 +130,17 @@ class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulado
                         TextField(
                           controller: _controladorUsd,
                           keyboardType: TextInputType.number,
-                          inputFormatters: [FormateadorMiles()],
+                          inputFormatters: [FormateadorMonto()],
                           onTap: () => setState(() => _editandoUsd = true),
                           onSubmitted: (valor) {
                             _editandoUsd = false;
-                            final monto = double.tryParse(valor.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+                            final monto = (Dinero.parsear(valor)?.unidades ?? 0);
                             ref.read(ahorrosControladorProvider.notifier).actualizarUsd(monto);
                           },
                           onTapOutside: (_) {
                             if (_editandoUsd) {
                               _editandoUsd = false;
-                              final monto = double.tryParse(
-                                _controladorUsd.text.replaceAll('.', '').replaceAll(',', '.'),
-                              ) ?? 0;
+                              final monto = (Dinero.parsear(_controladorUsd.text)?.unidades ?? 0);
                               ref.read(ahorrosControladorProvider.notifier).actualizarUsd(monto);
                             }
                           },
@@ -170,7 +166,7 @@ class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulado
                   children: [
                     Text('Total acumulado ARS', style: TextStyle(color: context.colores.textoSecundario, fontSize: 10)),
                     Text(
-                      '\$${NumberFormat('#,##0.##', 'es_AR').format(totalAcumulado)}',
+                      Dinero.desdeUnidades(totalAcumulado).formatear(),
                       style: const TextStyle(color: TemaApp.verde, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                   ],

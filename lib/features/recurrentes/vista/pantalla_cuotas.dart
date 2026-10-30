@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../../panel_control/logica/ahorro_disponible_provider.dart';
 import '../logica/cuotas_provider.dart';
 import '../modelo/cuota.dart';
 import 'dialogo_cuota.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Pantalla de gestión de cuotas en pago.
 class PantallaCuotas extends ConsumerWidget {
@@ -15,7 +15,6 @@ class PantallaCuotas extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cuotasAsync = ref.watch(cuotasControladorProvider);
-    final formato = NumberFormat('#,##0.##', 'es_AR');
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
@@ -40,8 +39,8 @@ class PantallaCuotas extends ConsumerWidget {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              _TarjetaAhorroVsCuotas(cuotas: cuotas, formato: formato),
-              ...cuotas.map((c) => _TarjetaCuota(cuota: c, formato: formato)),
+              _TarjetaAhorroVsCuotas(cuotas: cuotas),
+              ...cuotas.map((c) => _TarjetaCuota(cuota: c)),
               const SizedBox(height: 80),
             ],
           );
@@ -54,8 +53,7 @@ class PantallaCuotas extends ConsumerWidget {
 /// Muestra si los ahorros disponibles alcanzan para cancelar cuotas.
 class _TarjetaAhorroVsCuotas extends ConsumerWidget {
   final List<Cuota> cuotas;
-  final NumberFormat formato;
-  const _TarjetaAhorroVsCuotas({required this.cuotas, required this.formato});
+  const _TarjetaAhorroVsCuotas({required this.cuotas});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,7 +70,7 @@ class _TarjetaAhorroVsCuotas extends ConsumerWidget {
     } else {
       final masBarata = activas.reduce((a, b) => a.montoRestante <= b.montoRestante ? a : b);
       final falta = masBarata.montoRestante - disponible;
-      mensaje = 'Todavía no te alcanza para cancelar una cuota entera. La más cercana es "${masBarata.nombre}" (te faltan \$${formato.format(falta)}).';
+      mensaje = 'Todavía no te alcanza para cancelar una cuota entera. La más cercana es "${masBarata.nombre}" (te faltan ${Dinero.desdeUnidades(falta).formatear()}).';
     }
 
     return Container(
@@ -90,7 +88,7 @@ class _TarjetaAhorroVsCuotas extends ConsumerWidget {
             children: [
               const Icon(Icons.lightbulb_outline, size: 18, color: TemaApp.azul),
               const SizedBox(width: 8),
-              Text('Ahorros disponibles: \$${formato.format(disponible)}',
+              Text('Ahorros disponibles: ${Dinero.desdeUnidades(disponible).formatear()}',
                   style: const TextStyle(color: TemaApp.azul, fontWeight: FontWeight.bold, fontSize: 13)),
             ],
           ),
@@ -104,8 +102,7 @@ class _TarjetaAhorroVsCuotas extends ConsumerWidget {
 
 class _TarjetaCuota extends ConsumerWidget {
   final Cuota cuota;
-  final NumberFormat formato;
-  const _TarjetaCuota({required this.cuota, required this.formato});
+  const _TarjetaCuota({required this.cuota});
 
   Future<void> _confirmarEliminar(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
@@ -165,7 +162,7 @@ class _TarjetaCuota extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '\$${formato.format(cuota.montoCuota)} · cuota ${cuota.cuotasPagadas}/${cuota.totalCuotas} · día ${cuota.diaDebito}',
+            '${Dinero.desdeUnidades(cuota.montoCuota).formatear()} · cuota ${cuota.cuotasPagadas}/${cuota.totalCuotas} · día ${cuota.diaDebito}',
             style: TextStyle(color: context.colores.textoSecundario, fontSize: 12),
           ),
           const SizedBox(height: 8),
@@ -182,7 +179,7 @@ class _TarjetaCuota extends ConsumerWidget {
           Text(
             finalizada
                 ? 'Terminada · ya no se descuenta'
-                : 'Restan ${cuota.cuotasRestantes} cuotas · \$${formato.format(cuota.montoRestante)}',
+                : 'Restan ${cuota.cuotasRestantes} cuotas · ${Dinero.desdeUnidades(cuota.montoRestante).formatear()}',
             style: TextStyle(color: context.colores.textoSecundario, fontSize: 11),
           ),
         ],

@@ -3,9 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../logica/metas_provider.dart';
 import '../modelo/meta.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Diálogo para crear una nueva meta de ahorro.
 class DialogoNuevaMeta extends ConsumerStatefulWidget {
@@ -41,7 +42,7 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
     super.initState();
     final m = widget.aEditar;
     _controladorNombre = TextEditingController(text: m?.nombre ?? '');
-    _controladorMonto = TextEditingController(text: montoEditable(m?.montoObjetivo ?? 0));
+    _controladorMonto = TextEditingController(text: Dinero.desdeUnidades(m?.montoObjetivo ?? 0).textoEditable);
     _icono = m?.icono ?? 'flight';
     _moneda = m?.moneda ?? 'ARS';
   }
@@ -55,10 +56,7 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
 
   Future<void> _guardar() async {
     final nombre = _controladorNombre.text.trim();
-    final monto = double.tryParse(
-          _controladorMonto.text.replaceAll('.', '').replaceAll(',', '.'),
-        ) ??
-        0;
+    final monto = (Dinero.parsear(_controladorMonto.text)?.unidades ?? 0);
 
     if (nombre.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -118,7 +116,7 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
             TextField(
               controller: _controladorMonto,
               keyboardType: TextInputType.number,
-              inputFormatters: [FormateadorMiles()],
+              inputFormatters: [FormateadorMonto()],
               style: TextStyle(color: context.colores.textoPrimario),
               decoration: InputDecoration(prefixText: _moneda == 'USD' ? 'U\$D ' : '\$ ', hintText: 'Monto objetivo'),
             ),

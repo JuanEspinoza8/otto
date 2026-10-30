@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../logica/cuotas_provider.dart';
 import '../modelo/cuota.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Diálogo para cancelar/pagar N cuotas de una deuda.
 class DialogoPagarCuotas extends ConsumerStatefulWidget {
@@ -23,7 +23,6 @@ class DialogoPagarCuotas extends ConsumerStatefulWidget {
 class _DialogoPagarCuotasState extends ConsumerState<DialogoPagarCuotas> {
   Cuota? _sel;
   final _cantidad = TextEditingController(text: '1');
-  final _formato = NumberFormat('#,##0.##', 'es_AR');
 
   @override
   void initState() {
@@ -87,7 +86,7 @@ class _DialogoPagarCuotasState extends ConsumerState<DialogoPagarCuotas> {
             decoration: InputDecoration(labelText: '¿Cuántas cuotas pagás?', helperText: 'Restan ${_sel!.cuotasRestantes}'),
           ),
           const SizedBox(height: 12),
-          Text('Total a pagar: \$${_formato.format(total)}',
+          Text('Total a pagar: ${Dinero.desdeUnidades(total).formatear()}',
               style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold)),
           if (cap > 0)
             Text('Quedarían ${_sel!.cuotasPagadas + cap}/${_sel!.totalCuotas} pagadas',

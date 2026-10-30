@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../../categorias/modelo/categoria.dart';
 import '../../categorias/vista/dialogo_nueva_categoria.dart';
@@ -21,6 +20,8 @@ import '../../recurrentes/logica/horas_extras_provider.dart';
 import '../modelo/movimiento.dart';
 import '../logica/movimientos_provider.dart';
 import '../logica/mes_seleccionado_provider.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 class FormularioMovimiento extends ConsumerStatefulWidget {
   const FormularioMovimiento({super.key});
@@ -64,13 +65,9 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingrese un monto válido')));
        return;
     }
-    // En modo "horas extras" el número son horas (permite decimales). En el
-    // resto, el visor viene con puntos de miles que hay que quitar.
-    final esHE = _tipoActual == 'ingreso' && _categoriaSeleccionada?.nombre == 'Horas extras';
-    final montoTxt = esHE
-        ? _controladorMonto.text.replaceAll(',', '.')
-        : _controladorMonto.text.replaceAll('.', '').replaceAll(',', '.');
-    final monto = double.tryParse(montoTxt) ?? 0;
+    // En modo "horas extras" el número son horas (con decimales); si no, es un
+    // monto. Ambos se interpretan con el mismo parser es_AR.
+    final monto = (parsearCentesimos(_controladorMonto.text) ?? 0) / 100;
     if (monto <= 0) {
        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingrese un monto válido')));
        return;
@@ -88,7 +85,7 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
       final disponible = ref.read(ahorroDisponibleProvider);
       if (datosListos && monto > disponible + 0.5) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('No te alcanza. Disponible: \$${NumberFormat('#,##0.##', 'es_AR').format(disponible)}')),
+          SnackBar(content: Text('No te alcanza. Disponible: ${Dinero.desdeUnidades(disponible).formatear()}')),
         );
         return;
       }
@@ -298,7 +295,7 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
     final ajustes = ref.watch(ajustesControladorProvider).valueOrNull ?? const {};
     final valorHoraExtra = (ajustes['valorHoraExtra'] as double?) ?? 0.0;
     final esHorasExtras = _tipoActual == 'ingreso' && _categoriaSeleccionada?.nombre == 'Horas extras';
-    final horasIngresadas = double.tryParse(_controladorMonto.text.replaceAll(',', '.')) ?? 0;
+    final horasIngresadas = (parsearCentesimos(_controladorMonto.text) ?? 0) / 100;
     final totalHorasExtras = horasIngresadas * valorHoraExtra;
 
     return Form(
@@ -347,7 +344,7 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         inputFormatters: esHorasExtras
                             ? [FilteringTextInputFormatter.allow(RegExp(r'^\d*[\.,]?\d*'))]
-                            : [FormateadorMiles()],
+                            : [FormateadorMonto()],
                         onChanged: (_) => setState(() {}),
                         style: TextStyle(color: context.colores.textoPrimario, fontSize: 56, fontWeight: FontWeight.bold),
                         decoration: InputDecoration(
@@ -371,7 +368,7 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
                   const SizedBox(height: 8),
                   Text(
                     valorHoraExtra > 0
-                        ? '= \$${NumberFormat('#,##0.##', 'es_AR').format(totalHorasExtras)}  (a \$${NumberFormat('#,##0.##', 'es_AR').format(valorHoraExtra)}/h)'
+                        ? '= ${Dinero.desdeUnidades(totalHorasExtras).formatear()}  (a ${Dinero.desdeUnidades(valorHoraExtra).formatear()}/h)'
                         : 'Configurá el valor de la hora extra en Menú',
                     style: const TextStyle(color: TemaApp.verde, fontSize: 14, fontWeight: FontWeight.bold),
                   ),

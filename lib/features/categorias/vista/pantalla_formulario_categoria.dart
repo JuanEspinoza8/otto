@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import '../logica/categorias_provider.dart';
 import '../modelo/categoria.dart';
@@ -180,10 +182,15 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
             const SizedBox(height: 16),
             _ConstruirCaja(
               hijo: TextFormField(
-                initialValue: _presupuestoLimite > 0 ? _presupuestoLimite.toString() : '',
+                initialValue: Dinero.desdeUnidades(_presupuestoLimite).textoEditable,
                 decoration: const InputDecoration(labelText: 'Presupuesto Límite (Opcional)', border: InputBorder.none),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onSaved: (valor) => _presupuestoLimite = double.tryParse(valor ?? '0') ?? 0.0,
+                inputFormatters: [FormateadorMonto()],
+                validator: (valor) {
+                  if (valor == null || valor.trim().isEmpty) return null;
+                  return Dinero.parsear(valor) == null ? 'Monto inválido' : null;
+                },
+                onSaved: (valor) => _presupuestoLimite = Dinero.parsear(valor ?? '')?.unidades ?? 0,
               ),
             ),
             const SizedBox(height: 24),

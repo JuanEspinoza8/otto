@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../logica/horas_extras_provider.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Cartel del dashboard que pregunta una vez por mes si hizo horas extras.
 class WidgetPreguntaHorasExtras extends ConsumerWidget {
@@ -81,9 +81,8 @@ class _DialogoHorasExtrasState extends ConsumerState<_DialogoHorasExtras> {
   @override
   Widget build(BuildContext context) {
     final valor = ref.read(horasExtrasMesProvider.notifier).valorHora;
-    final horas = double.tryParse(_horas.text.replaceAll(',', '.')) ?? 0;
+    final horas = (parsearCentesimos(_horas.text) ?? 0) / 100;
     final total = horas * valor;
-    final formato = NumberFormat('#,##0.##', 'es_AR');
 
     return AlertDialog(
       title: Text('Horas extras', style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.bold)),
@@ -101,7 +100,7 @@ class _DialogoHorasExtrasState extends ConsumerState<_DialogoHorasExtras> {
           ),
           const SizedBox(height: 12),
           Text(
-            'A \$${formato.format(valor)}/h = \$${formato.format(total)}',
+            'A ${Dinero.desdeUnidades(valor).formatear()}/h = ${Dinero.desdeUnidades(total).formatear()}',
             style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold),
           ),
         ],

@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../logica/ahorro_disponible_provider.dart';
 import '../logica/ahorros_provider.dart';
 import '../logica/dashboard_provider.dart';
 import '../logica/dolar_blue_provider.dart';
 import '../logica/metas_provider.dart';
 import '../modelo/meta.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Diálogo para aportar dinero a una meta de ahorro (o eliminarla).
 class DialogoAportarMeta extends ConsumerStatefulWidget {
@@ -26,7 +26,6 @@ class DialogoAportarMeta extends ConsumerStatefulWidget {
 
 class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
   final _monto = TextEditingController();
-  final _formato = NumberFormat('#,##0.##', 'es_AR');
 
   @override
   void dispose() {
@@ -36,7 +35,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
 
   Future<void> _aportar() async {
     // Siempre se ingresa en PESOS (es lo que tiene el usuario).
-    final pesos = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final pesos = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     if (pesos <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ingresá un monto a aportar')),
@@ -49,7 +48,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
     final disponible = ref.read(ahorroDisponibleProvider);
     if (datosListos && pesos > disponible + 0.5) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No te alcanza. Disponible: \$${_formato.format(disponible)}')),
+        SnackBar(content: Text('No te alcanza. Disponible: ${Dinero.desdeUnidades(disponible).formatear()}')),
       );
       return;
     }
@@ -79,7 +78,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
     final aFalta = restanteEnPesos < disponible ? restanteEnPesos : disponible;
 
     // Conversión en vivo de lo escrito (si es meta USD).
-    final pesosEscritos = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final pesosEscritos = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     final usdEquivalente = (meta.esUsd && blue > 0) ? pesosEscritos / blue : 0;
 
     return AlertDialog(
@@ -89,7 +88,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Ahorrado: $simbolo${_formato.format(meta.montoActual)} de $simbolo${_formato.format(meta.montoObjetivo)}',
+            'Ahorrado: $simbolo${Dinero.desdeUnidades(meta.montoActual).formatear(simbolo: false)} de $simbolo${Dinero.desdeUnidades(meta.montoObjetivo).formatear(simbolo: false)}',
             style: TextStyle(color: context.colores.textoSecundario, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -108,7 +107,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
               Icon(Icons.account_balance_wallet_outlined, size: 16, color: disponible > 0 ? TemaApp.verde : TemaApp.rojo),
               const SizedBox(width: 6),
               Text(
-                'Disponible: \$${_formato.format(disponible)}',
+                'Disponible: ${Dinero.desdeUnidades(disponible).formatear()}',
                 style: TextStyle(color: disponible > 0 ? TemaApp.verde : TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ],
@@ -117,7 +116,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
           TextField(
             controller: _monto,
             keyboardType: TextInputType.number,
-            inputFormatters: [FormateadorMiles()],
+            inputFormatters: [FormateadorMonto()],
             style: TextStyle(color: context.colores.textoPrimario),
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
@@ -129,7 +128,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
             const SizedBox(height: 6),
             Text(
               blue > 0
-                  ? 'Se convierte a ≈ U\$D ${usdEquivalente.toStringAsFixed(2)} (blue \$${_formato.format(blue)})'
+                  ? 'Se convierte a ≈ U\$D ${usdEquivalente.toStringAsFixed(2)} (blue ${Dinero.desdeUnidades(blue).formatear()})'
                   : 'Esperando cotización del dólar…',
               style: const TextStyle(color: TemaApp.azul, fontSize: 11),
             ),
@@ -144,12 +143,12 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
               children: [
                 if (aFalta > 0)
                   ActionChip(
-                    label: Text('Lo que falta (\$${_formato.format(aFalta)})'),
-                    onPressed: () => setState(() => _monto.text = montoEditable(aFalta)),
+                    label: Text('Lo que falta (${Dinero.desdeUnidades(aFalta).formatear()})'),
+                    onPressed: () => setState(() => _monto.text = Dinero.desdeUnidades(aFalta).textoEditable),
                   ),
                 ActionChip(
-                  label: Text('Todo lo disponible (\$${_formato.format(disponible)})'),
-                  onPressed: () => setState(() => _monto.text = montoEditable(disponible)),
+                  label: Text('Todo lo disponible (${Dinero.desdeUnidades(disponible).formatear()})'),
+                  onPressed: () => setState(() => _monto.text = Dinero.desdeUnidades(disponible).textoEditable),
                 ),
               ],
             ),

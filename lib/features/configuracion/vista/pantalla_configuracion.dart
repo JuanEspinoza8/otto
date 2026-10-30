@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../panel_control/vista/pantalla_resumen_mes.dart';
 import '../logica/ajustes_provider.dart';
 import '../logica/servicio_notificaciones.dart';
 import '../logica/servicio_respaldo.dart';
 import '../../panel_control/vista/widget_ahorros_acumulados.dart';
 import '../../categorias/vista/pantalla_categorias.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 class PantallaConfiguracion extends ConsumerStatefulWidget {
   const PantallaConfiguracion({super.key});
@@ -40,7 +40,7 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
           controller: controlador,
           autofocus: true,
           keyboardType: (titulo.contains('Salario') || titulo.contains('hora')) ? TextInputType.number : TextInputType.text,
-          inputFormatters: (titulo.contains('Salario') || titulo.contains('hora')) ? [FormateadorMiles()] : null,
+          inputFormatters: (titulo.contains('Salario') || titulo.contains('hora')) ? [FormateadorMonto()] : null,
           decoration: InputDecoration(hintText: titulo),
         ),
         actions: [
@@ -101,12 +101,12 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
                   leading: const Icon(Icons.attach_money, color: Colors.blueGrey),
                   title: const Text('Salario mensual'),
                   subtitle: Text(
-                    salarioMensual > 0 ? '\$${NumberFormat('#,##0.##', 'es_AR').format(salarioMensual)}' : 'Sin configurar',
+                    salarioMensual > 0 ? Dinero.desdeUnidades(salarioMensual).formatear() : 'Sin configurar',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.edit, size: 16, color: Colors.grey),
-                  onTap: () => _editarTexto(context, ref, 'Salario mensual', montoEditable(salarioMensual), (valor) {
-                    final salario = double.tryParse(valor.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+                  onTap: () => _editarTexto(context, ref, 'Salario mensual', Dinero.desdeUnidades(salarioMensual).textoEditable, (valor) {
+                    final salario = (Dinero.parsear(valor)?.unidades ?? 0);
                     ref.read(ajustesControladorProvider.notifier).actualizarSalario(salario);
                   }),
                 ),
@@ -115,12 +115,12 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
                   leading: const Icon(Icons.more_time, color: Colors.blueGrey),
                   title: const Text('Valor de hora extra'),
                   subtitle: Text(
-                    valorHoraExtra > 0 ? '\$${NumberFormat('#,##0.##', 'es_AR').format(valorHoraExtra)} por hora' : 'Sin configurar',
+                    valorHoraExtra > 0 ? '${Dinero.desdeUnidades(valorHoraExtra).formatear()} por hora' : 'Sin configurar',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.edit, size: 16, color: Colors.grey),
-                  onTap: () => _editarTexto(context, ref, 'Valor de hora extra', montoEditable(valorHoraExtra), (valor) {
-                    final v = double.tryParse(valor.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+                  onTap: () => _editarTexto(context, ref, 'Valor de hora extra', Dinero.desdeUnidades(valorHoraExtra).textoEditable, (valor) {
+                    final v = (Dinero.parsear(valor)?.unidades ?? 0);
                     ref.read(ajustesControladorProvider.notifier).actualizarValorHoraExtra(v);
                   }),
                 ),

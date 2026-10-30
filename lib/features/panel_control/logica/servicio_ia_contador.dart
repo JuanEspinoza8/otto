@@ -1,26 +1,25 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 
 import '../../../core/utilidades/configuracion_ia.dart';
 import 'servicio_resumen_mes.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Pide a la IA (Pollinations) una devolución del mes en rol de contador.
 class ServicioIaContador {
   static Future<String?> evaluar(ResumenMesData resumen, {String? metasResumen}) async {
     if (!ConfiguracionIA.estaConfigurada) return null;
     try {
-      final f = NumberFormat('#,##0.##', 'es_AR');
-      final egresosTxt = resumen.egresos.map((e) => '${e.nombre}: \$${f.format(e.monto)}').join(', ');
-      final ingresosTxt = resumen.ingresos.map((e) => '${e.nombre}: \$${f.format(e.monto)}').join(', ');
+      final egresosTxt = resumen.egresos.map((e) => '${e.nombre}: ${Dinero.desdeUnidades(e.monto).formatear()}').join(', ');
+      final ingresosTxt = resumen.ingresos.map((e) => '${e.nombre}: ${Dinero.desdeUnidades(e.monto).formatear()}').join(', ');
 
       final user = '''
 Sos un contador amable y claro. Analizá este mes y dame una devolución BREVE (3 a 5 frases), en español rioplatense, sin markdown ni listas, con un consejo práctico.
 
-Ingresos totales: \$${f.format(resumen.totalIngresos)} ($ingresosTxt).
-Egresos totales: \$${f.format(resumen.totalEgresos)} ($egresosTxt).
-Sobrante del mes: \$${f.format(resumen.sobrante)}.
+Ingresos totales: ${Dinero.desdeUnidades(resumen.totalIngresos).formatear()} ($ingresosTxt).
+Egresos totales: ${Dinero.desdeUnidades(resumen.totalEgresos).formatear()} ($egresosTxt).
+Sobrante del mes: ${Dinero.desdeUnidades(resumen.sobrante).formatear()}.
 ${metasResumen != null && metasResumen.isNotEmpty ? 'Metas de ahorro: $metasResumen.' : ''}
 
 Evaluá qué tan bien administró el mes, resaltá el gasto más pesado y si el ahorro es sano.''';

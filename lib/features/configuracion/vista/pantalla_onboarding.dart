@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../../core/ui/widgets/mascota_otto.dart';
 import '../logica/onboarding_provider.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Pantalla de onboarding que se muestra al primer uso de la app.
 /// Flujo de 3 pasos: Bienvenida → Datos personales → Listo.
@@ -42,9 +43,8 @@ class _PantallaOnboardingState extends ConsumerState<PantallaOnboarding> {
 
   Future<void> _finalizar() async {
     final nombre = _controladorNombre.text.trim();
-    final salarioTexto = _controladorSalario.text.replaceAll('.', '').replaceAll(',', '.');
-    final salario = double.tryParse(salarioTexto) ?? 0;
-    final horaExtra = double.tryParse(_controladorHoraExtra.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final salario = Dinero.parsear(_controladorSalario.text)?.unidades ?? 0;
+    final horaExtra = Dinero.parsear(_controladorHoraExtra.text)?.unidades ?? 0;
 
     await ref.read(onboardingControladorProvider.notifier).completarOnboarding(
       nombre: nombre.isNotEmpty ? nombre : 'Usuario',
@@ -253,7 +253,7 @@ class _PaginaDatos extends StatelessWidget {
           TextField(
             controller: controladorSalario,
             keyboardType: TextInputType.number,
-            inputFormatters: [FormateadorMiles()],
+            inputFormatters: [FormateadorMonto()],
             style: const TextStyle(color: Colors.white, fontSize: 18),
             decoration: InputDecoration(
               prefixText: '\$ ',
@@ -287,7 +287,7 @@ class _PaginaDatos extends StatelessWidget {
           TextField(
             controller: controladorHoraExtra,
             keyboardType: TextInputType.number,
-            inputFormatters: [FormateadorMiles()],
+            inputFormatters: [FormateadorMonto()],
             style: const TextStyle(color: Colors.white, fontSize: 18),
             decoration: InputDecoration(
               prefixText: '\$ ',

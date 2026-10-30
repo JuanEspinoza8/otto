@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../panel_control/logica/dashboard_provider.dart';
 import '../logica/categorias_provider.dart';
 import '../modelo/categoria.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Sección de presupuestos por categoría: muestra el progreso de gasto del mes
 /// contra el límite de cada rubro y permite asignar/editar esos límites.
@@ -18,7 +18,6 @@ class SeccionPresupuestos extends ConsumerWidget {
     // Gastado del mes POR CATEGORÍA, calculado sobre la base (no sobre la lista
     // paginada de 30 movimientos, que subcontaba).
     final gastosPorId = ref.watch(gastoPorCategoriaIdProvider).valueOrNull ?? {};
-    final formato = NumberFormat('#,##0.##', 'es_AR');
 
     final conLimite = categorias.where((c) => c.tipo == 'gasto' && c.presupuestoLimite > 0).toList();
 
@@ -81,7 +80,7 @@ class SeccionPresupuestos extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '\$${formato.format(gastado)} de \$${formato.format(categoria.presupuestoLimite)}',
+                        '${Dinero.desdeUnidades(gastado).formatear()} de ${Dinero.desdeUnidades(categoria.presupuestoLimite).formatear()}',
                         style: TextStyle(fontSize: 12, color: context.colores.textoSecundario),
                       ),
                     ],
@@ -121,7 +120,6 @@ class _HojaLimites extends ConsumerWidget {
     final categorias = (ref.watch(categoriasControladorProvider).valueOrNull ?? [])
         .where((c) => c.tipo == 'gasto')
         .toList();
-    final formato = NumberFormat('#,##0.##', 'es_AR');
 
     return SafeArea(
       child: Padding(
@@ -147,7 +145,7 @@ class _HojaLimites extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: Text(c.nombre, style: TextStyle(color: context.colores.textoPrimario)),
                     trailing: Text(
-                      c.presupuestoLimite > 0 ? '\$${formato.format(c.presupuestoLimite)}' : 'Sin límite',
+                      c.presupuestoLimite > 0 ? Dinero.desdeUnidades(c.presupuestoLimite).formatear() : 'Sin límite',
                       style: TextStyle(
                         color: c.presupuestoLimite > 0 ? TemaApp.verde : context.colores.textoSecundario,
                         fontWeight: FontWeight.bold,
@@ -166,7 +164,7 @@ class _HojaLimites extends ConsumerWidget {
 
   Future<void> _editarLimite(BuildContext context, WidgetRef ref, Categoria cat) async {
     final controlador = TextEditingController(
-      text: montoEditable(cat.presupuestoLimite),
+      text: Dinero.desdeUnidades(cat.presupuestoLimite).textoEditable,
     );
     final nuevo = await showDialog<double>(
       context: context,
@@ -176,7 +174,7 @@ class _HojaLimites extends ConsumerWidget {
           controller: controlador,
           autofocus: true,
           keyboardType: TextInputType.number,
-          inputFormatters: [FormateadorMiles()],
+          inputFormatters: [FormateadorMonto()],
           style: TextStyle(color: ctx.colores.textoPrimario),
           decoration: const InputDecoration(prefixText: '\$ ', hintText: 'Monto mensual (0 = sin límite)'),
         ),
@@ -184,7 +182,7 @@ class _HojaLimites extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancelar', style: TextStyle(color: ctx.colores.textoSecundario))),
           TextButton(
             onPressed: () {
-              final v = double.tryParse(controlador.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+              final v = (Dinero.parsear(controlador.text)?.unidades ?? 0);
               Navigator.pop(ctx, v);
             },
             child: const Text('Guardar', style: TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold)),

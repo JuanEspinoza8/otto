@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
 import '../logica/dolar_blue_provider.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Badge compacto que muestra la cotización venta del dólar blue en tiempo real.
 class WidgetDolarBlue extends ConsumerWidget {
@@ -29,7 +29,7 @@ class WidgetDolarBlue extends ConsumerWidget {
       data: (datos) {
         if (datos == null) return const _Badge(texto: '—');
         final venta = datos['venta'] ?? 0;
-        return _Badge(texto: '\$${NumberFormat('#,##0.##', 'es_AR').format(venta)}');
+        return _Badge(texto: Dinero.desdeUnidades(venta).formatear());
       },
     );
   }

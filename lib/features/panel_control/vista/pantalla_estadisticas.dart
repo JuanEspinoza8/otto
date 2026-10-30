@@ -11,6 +11,7 @@ import '../logica/ahorro_disponible_provider.dart';
 import '../logica/dashboard_provider.dart';
 import '../logica/metas_provider.dart';
 import '../logica/servicio_resumen_mes.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Pantalla de estadísticas detalladas del mes seleccionado. Se abre al tocar
 /// cualquiera de los gráficos del dashboard.
@@ -151,7 +152,7 @@ class PantallaEstadisticas extends ConsumerWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text('\$${NumberFormat('#,##0.##', 'es_AR').format(monto)}',
+            child: Text(Dinero.desdeUnidades(monto).formatear(),
                 maxLines: 1, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -232,7 +233,7 @@ class PantallaEstadisticas extends ConsumerWidget {
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colores.textoPrimario)),
                     ),
                     const SizedBox(width: 8),
-                    Text('\$${NumberFormat('#,##0.##', 'es_AR').format(l.monto)}',
+                    Text(Dinero.desdeUnidades(l.monto).formatear(),
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
                   ],
                 ),

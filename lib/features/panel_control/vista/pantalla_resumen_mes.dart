@@ -9,6 +9,7 @@ import '../../categorias/logica/categorias_provider.dart';
 import '../logica/metas_provider.dart';
 import '../logica/servicio_resumen_mes.dart';
 import '../logica/servicio_ia_contador.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Pantalla de resumen de un mes: ingresos, egresos por categoría y sobrante,
 /// con una devolución de la IA en rol de contador.
@@ -25,7 +26,6 @@ class PantallaResumenMes extends ConsumerStatefulWidget {
 }
 
 class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
-  final _formato = NumberFormat('#,##0.##', 'es_AR');
   ResumenMesData? _resumen;
   String? _devolucionIa;
   bool _cargandoIa = true;
@@ -80,7 +80,7 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
                     const SizedBox(height: 8),
                     Center(
                       child: FittedBox(
-                        child: Text('\$${_formato.format(r.totalIngresos)}',
+                        child: Text(Dinero.desdeUnidades(r.totalIngresos).formatear(),
                             style: const TextStyle(color: TemaApp.verde, fontSize: 48, fontWeight: FontWeight.bold)),
                       ),
                     ),
@@ -107,7 +107,7 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
                           Text('TE QUEDÓ', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                           const SizedBox(height: 6),
                           FittedBox(
-                            child: Text('\$${_formato.format(r.sobrante)}',
+                            child: Text(Dinero.desdeUnidades(r.sobrante).formatear(),
                                 style: TextStyle(color: r.sobrante >= 0 ? TemaApp.verde : TemaApp.rojo, fontSize: 40, fontWeight: FontWeight.bold)),
                           ),
                         ],
@@ -135,7 +135,7 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
           ),
           const SizedBox(width: 12),
           Expanded(child: Text(l.nombre, style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.w600))),
-          Text('${esIngreso ? '+' : '-'}\$${_formato.format(l.monto)}',
+          Text('${esIngreso ? '+' : '-'}${Dinero.desdeUnidades(l.monto).formatear()}',
               style: TextStyle(color: esIngreso ? TemaApp.verde : TemaApp.rojo, fontWeight: FontWeight.bold)),
         ],
       ),

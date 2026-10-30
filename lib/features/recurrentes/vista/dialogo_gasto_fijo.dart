@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../logica/gastos_fijos_provider.dart';
 import '../modelo/gasto_fijo.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Diálogo para crear o editar un gasto fijo.
 class DialogoGastoFijo extends ConsumerStatefulWidget {
@@ -34,7 +35,7 @@ class _DialogoGastoFijoState extends ConsumerState<DialogoGastoFijo> {
     super.initState();
     _nombre = TextEditingController(text: widget.aEditar?.nombre ?? '');
     _monto = TextEditingController(
-      text: montoEditable(widget.aEditar?.monto ?? 0),
+      text: Dinero.desdeUnidades(widget.aEditar?.monto ?? 0).textoEditable,
     );
     _categoriaId = widget.aEditar?.categoriaId;
     _diaDebito = widget.aEditar?.diaDebito ?? 1;
@@ -49,7 +50,7 @@ class _DialogoGastoFijoState extends ConsumerState<DialogoGastoFijo> {
 
   Future<void> _guardar() async {
     final nombre = _nombre.text.trim();
-    final monto = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final monto = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     if (nombre.isEmpty || monto <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Completá nombre y monto válido')),
@@ -95,7 +96,7 @@ class _DialogoGastoFijoState extends ConsumerState<DialogoGastoFijo> {
             TextField(
               controller: _monto,
               keyboardType: TextInputType.number,
-              inputFormatters: [FormateadorMiles()],
+              inputFormatters: [FormateadorMonto()],
               style: TextStyle(color: context.colores.textoPrimario),
               decoration: const InputDecoration(prefixText: '\$ ', hintText: 'Monto mensual'),
             ),

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../../panel_control/logica/dolar_blue_provider.dart';
 import '../../panel_control/logica/metas_provider.dart';
 import '../logica/saldo_mes_anterior_provider.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Tarjeta que ofrece qué hacer con el sobrante del mes anterior.
 class WidgetSaldoMesAnterior extends ConsumerWidget {
@@ -16,7 +16,6 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
     final sobra = ref.watch(saldoMesAnteriorProvider).valueOrNull ?? 0;
     if (sobra <= 0) return const SizedBox.shrink();
 
-    final formato = NumberFormat('#,##0.##', 'es_AR');
     final notifier = ref.read(saldoMesAnteriorProvider.notifier);
 
     return Container(
@@ -35,7 +34,7 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
               const Text('💸', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Te sobraron \$${formato.format(sobra)} del mes pasado',
+                child: Text('Te sobraron ${Dinero.desdeUnidades(sobra).formatear()} del mes pasado',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.colores.textoPrimario)),
               ),
             ],

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../../panel_control/logica/ahorro_disponible_provider.dart';
 import '../logica/cuotas_provider.dart';
 import '../logica/gastos_fijos_provider.dart';
 import 'dialogo_pagar_cuotas.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Un aviso para el centro de notificaciones.
 class _Aviso {
@@ -24,7 +24,6 @@ class PantallaNotificaciones extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final formato = NumberFormat('#,##0.##', 'es_AR');
     final disponible = ref.watch(ahorroDisponibleProvider);
     final cuotas = (ref.watch(cuotasControladorProvider).valueOrNull ?? [])
         .where((c) => c.activo && !c.finalizada)
@@ -53,7 +52,7 @@ class PantallaNotificaciones extends ConsumerWidget {
 
       if (cancelables.isNotEmpty) {
         avisos.add(_Aviso(Icons.savings, TemaApp.verde, 'Podés cancelar deudas',
-            'Con tus ahorros (\$${formato.format(disponible)}) podés cancelar por completo ${cancelables.length} de ${cuotas.length}: ${cancelables.map((c) => c.nombre).join(', ')}. Tocá para pagar.',
+            'Con tus ahorros (${Dinero.desdeUnidades(disponible).formatear()}) podés cancelar por completo ${cancelables.length} de ${cuotas.length}: ${cancelables.map((c) => c.nombre).join(', ')}. Tocá para pagar.',
             onTap: () => DialogoPagarCuotas.mostrar(context)));
       }
       if (cuotasCubiertas > 0) {
@@ -63,7 +62,7 @@ class PantallaNotificaciones extends ConsumerWidget {
       } else {
         final masBarata = cuotas.reduce((a, b) => a.montoCuota <= b.montoCuota ? a : b);
         avisos.add(_Aviso(Icons.info_outline, context.colores.textoSecundario, 'Cuotas',
-            'Todavía no te alcanza para pagar una cuota. La más barata es "${masBarata.nombre}" (\$${formato.format(masBarata.montoCuota)}).'));
+            'Todavía no te alcanza para pagar una cuota. La más barata es "${masBarata.nombre}" (${Dinero.desdeUnidades(masBarata.montoCuota).formatear()}).'));
       }
     }
 
@@ -74,7 +73,7 @@ class PantallaNotificaciones extends ConsumerWidget {
           .map((f) => '${f.nombre} (día ${f.diaDebito})')
           .join(', ');
       avisos.add(_Aviso(Icons.event_repeat, TemaApp.rojo, 'Gastos fijos del mes',
-          'Este mes se debitan \$${formato.format(total)} en fijos: $proximos. Confirmalos en "Pendientes del mes".'));
+          'Este mes se debitan ${Dinero.desdeUnidades(total).formatear()} en fijos: $proximos. Confirmalos en "Pendientes del mes".'));
     }
 
     return Scaffold(

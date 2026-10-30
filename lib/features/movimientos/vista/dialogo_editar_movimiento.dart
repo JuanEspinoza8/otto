@@ -3,10 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/formateador_miles.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../logica/movimientos_provider.dart';
 import '../modelo/movimiento.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/dinero/formateador_monto.dart';
 
 /// Diálogo para editar un movimiento existente (monto, concepto, categoría
 /// y fecha). El tipo (ingreso/gasto) se mantiene fijo.
@@ -34,7 +35,7 @@ class _DialogoEditarMovimientoState extends ConsumerState<DialogoEditarMovimient
   @override
   void initState() {
     super.initState();
-    _monto = TextEditingController(text: montoEditable(widget.movimiento.monto));
+    _monto = TextEditingController(text: Dinero.desdeUnidades(widget.movimiento.monto).textoEditable);
     _concepto = TextEditingController(text: widget.movimiento.descripcion ?? '');
     _fecha = widget.movimiento.fecha;
     // Los aportes de ahorro no llegan a este editor (no tienen botón de editar),
@@ -60,7 +61,7 @@ class _DialogoEditarMovimientoState extends ConsumerState<DialogoEditarMovimient
   }
 
   Future<void> _guardar() async {
-    final monto = double.tryParse(_monto.text.replaceAll('.', '').replaceAll(',', '.')) ?? 0;
+    final monto = (Dinero.parsear(_monto.text)?.unidades ?? 0);
     if (monto <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ingresá un monto válido')),
@@ -101,7 +102,7 @@ class _DialogoEditarMovimientoState extends ConsumerState<DialogoEditarMovimient
             TextField(
               controller: _monto,
               keyboardType: TextInputType.number,
-              inputFormatters: [FormateadorMiles()],
+              inputFormatters: [FormateadorMonto()],
               style: TextStyle(color: context.colores.textoPrimario),
               decoration: const InputDecoration(prefixText: '\$ ', hintText: 'Monto'),
             ),

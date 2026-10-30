@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../../core/tema/tema_app.dart';
 import '../logica/dashboard_provider.dart';
 import '../logica/ahorro_disponible_provider.dart';
 import '../logica/metas_provider.dart';
+import '../../../core/dinero/dinero.dart';
 
 /// Formatea un monto según el modo elegido (0: K, 1: M/m, 2: exacto).
 String formatearMontoResumen(double m, int modo) {
-  final f0 = NumberFormat('#,##0.##', 'es_AR');
   switch (modo) {
     case 1: // Millones / miles
       if (m >= 1000000) return '${(m / 1000000).toStringAsFixed(2).replaceAll('.', ',')}M';
       if (m >= 1000) return '${(m / 1000).round()}m';
-      return f0.format(m);
+      return Dinero.desdeUnidades(m).formatear(simbolo: false);
     case 2: // Exacto
-      return f0.format(m);
+      return Dinero.desdeUnidades(m).formatear(simbolo: false);
     default: // K
       if (m >= 1000) return '${(m / 1000).round()}K';
-      return f0.format(m);
+      return Dinero.desdeUnidades(m).formatear(simbolo: false);
   }
 }
 
@@ -113,7 +112,7 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
                     ),
                     Text(
                       cantMetas > 0
-                          ? 'de \$${NumberFormat('#,##0.##', 'es_AR').format(montoDineroMeta)} en $cantMetas metas'
+                          ? 'de ${Dinero.desdeUnidades(montoDineroMeta).formatear()} en $cantMetas metas'
                           : 'Sin metas activas',
                       style: TextStyle(color: context.colores.textoSecundario, fontSize: 10),
                     ),
