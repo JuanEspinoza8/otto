@@ -55,10 +55,7 @@ Reglas:
       final respuesta = await http
           .post(
             Uri.parse(ConfiguracionIA.endpoint),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${ConfiguracionIA.apiKey}',
-            },
+            headers: ConfiguracionIA.encabezados,
             body: cuerpo,
           )
           .timeout(const Duration(seconds: 25));

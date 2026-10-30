@@ -37,10 +37,7 @@ Evaluá qué tan bien administró el mes, resaltá el gasto más pesado y si el 
       final respuesta = await http
           .post(
             Uri.parse(ConfiguracionIA.endpoint),
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${ConfiguracionIA.apiKey}',
-            },
+            headers: ConfiguracionIA.encabezados,
             body: cuerpo,
           )
           .timeout(const Duration(seconds: 25));

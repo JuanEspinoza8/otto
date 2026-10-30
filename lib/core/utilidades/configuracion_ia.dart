@@ -1,17 +1,23 @@
-/// Configuración de la integración con IA (Pollinations, compatible OpenAI).
+/// Configuración de la integración con IA.
 ///
-/// La clave NO va en el código: se inyecta al compilar con
-/// `--dart-define=POLLINATIONS_KEY=...` (o `--dart-define-from-file=env.json`).
-/// Si no se define, la IA queda desactivada y la app usa el parser local.
+/// La app no guarda ninguna clave: habla con un proxy propio (ver `proxy/`)
+/// que agrega la clave de Pollinations y limita el uso. La URL del proxy se
+/// inyecta al compilar con `--dart-define-from-file=env.json`. Si no se
+/// define, la IA queda desactivada y el chat usa el parser local.
 class ConfiguracionIA {
-  /// Clave de Pollinations, inyectada al compilar.
-  static const String apiKey = String.fromEnvironment('POLLINATIONS_KEY');
+  /// URL del proxy de IA (compatible con la API de chat de OpenAI).
+  static const String endpoint = String.fromEnvironment('OTTO_IA_URL');
 
-  /// Modelo de texto a usar (Pollinations: openai, openai-fast, mistral, etc.).
+  /// Token opcional que el proxy exige en `X-Otto-Token`.
+  static const String tokenApp = String.fromEnvironment('OTTO_IA_TOKEN');
+
+  /// Modelo de texto a usar (Pollinations: openai, openai-fast).
   static const String modelo = 'openai';
 
-  /// Endpoint OpenAI-compatible de Pollinations.
-  static const String endpoint = 'https://gen.pollinations.ai/v1/chat/completions';
+  static bool get estaConfigurada => endpoint.isNotEmpty;
 
-  static bool get estaConfigurada => apiKey.isNotEmpty;
+  static Map<String, String> get encabezados => {
+        'Content-Type': 'application/json',
+        if (tokenApp.isNotEmpty) 'X-Otto-Token': tokenApp,
+      };
 }

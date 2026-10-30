@@ -1,0 +1,12 @@
+name = "otto-ia-proxy"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+# Hasta 10 pedidos por minuto por IP.
+[[ratelimits]]
+name = "LIMITADOR"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 10
+  period = 60
