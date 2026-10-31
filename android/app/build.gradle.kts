@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,8 +8,15 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firma de release: android/key.properties (fuera de git) apunta al keystore.
+// Ver "Firma del APK" en el README.
+val archivoFirma = rootProject.file("key.properties")
+val firma = Properties().apply {
+    if (archivoFirma.exists()) FileInputStream(archivoFirma).use { load(it) }
+}
+
 android {
-    namespace = "com.example.finanzas"
+    namespace = "io.github.juanespinoza8.otto"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -17,21 +27,37 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.finanzas"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "io.github.juanespinoza8.otto"
         minSdk = 24
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (archivoFirma.exists()) {
+                keyAlias = firma.getProperty("keyAlias")
+                keyPassword = firma.getProperty("keyPassword")
+                storeFile = file(firma.getProperty("storeFile"))
+                storePassword = firma.getProperty("storePassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+}
+
+// Un release firmado con la clave debug no se puede actualizar desde otra
+// PC: si falta el keystore, el build de release falla en vez de firmar mal.
+tasks.matching { it.name == "assembleRelease" || it.name == "bundleRelease" }.configureEach {
+    doFirst {
+        if (!archivoFirma.exists()) {
+            throw GradleException("Falta android/key.properties para firmar el release (ver README).")
         }
     }
 }
