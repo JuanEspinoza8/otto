@@ -37,7 +37,8 @@ se llevan con el respaldo.
 
 - La app vieja sigue instalada hasta el paso 8: no se pierde nada.
 - Antes de importar, la app nueva guarda una copia de su base
-  (`finanzas_antes_de_importar.db`).
+  (`finanzas_antes_de_importar_<fecha>.db`) y antes de reemplazar muestra cuántos
+  movimientos trae el archivo.
 - Si el cliente actualiza sin pasar por el respaldo (misma app y firma), la
   migración corre al abrir: copia el archivo (`finanzas_respaldo_v8.db`),
   verifica los saldos antes de confirmar y, si no cierran, deja la base como
