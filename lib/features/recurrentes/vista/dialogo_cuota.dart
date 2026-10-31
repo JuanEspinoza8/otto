@@ -3,9 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../categorias/logica/categorias_provider.dart';
 import '../logica/planes_provider.dart';
 import '../modelo/plan.dart';
+import 'selector_categoria_plan.dart';
 import '../../../core/ui/acciones.dart';
 import '../../../core/utilidades/fechas.dart';
 import '../../../core/dinero/dinero.dart';
@@ -95,10 +95,6 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
 
   @override
   Widget build(BuildContext context) {
-    final categorias = (ref.watch(categoriasControladorProvider).valueOrNull ?? [])
-        .where((c) => c.tipo == 'gasto')
-        .toList();
-
     return AlertDialog(
       title: Text(
         widget.aEditar == null ? 'Nueva cuota' : 'Editar cuota',
@@ -149,15 +145,10 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
               ],
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<int?>(
-              initialValue: _categoriaId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Categoría (opcional)'),
-              items: [
-                const DropdownMenuItem<int?>(value: null, child: Text('Otros Gastos')),
-                ...categorias.map((c) => DropdownMenuItem<int?>(value: c.id, child: Text(c.nombre))),
-              ],
-              onChanged: (v) => setState(() => _categoriaId = v),
+            SelectorCategoriaPlan(
+              tipo: TipoPlan.cuotas,
+              categoriaId: _categoriaId,
+              alCambiar: (id) => setState(() => _categoriaId = id),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(

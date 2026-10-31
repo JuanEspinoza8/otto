@@ -6,9 +6,9 @@ import '../../../core/dinero/formateador_monto.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/ui/acciones.dart';
 import '../../../core/utilidades/fechas.dart';
-import '../../categorias/logica/categorias_provider.dart';
 import '../logica/planes_provider.dart';
 import '../modelo/plan.dart';
+import 'selector_categoria_plan.dart';
 
 /// Diálogo para crear o editar un gasto fijo.
 class DialogoGastoFijo extends ConsumerStatefulWidget {
@@ -84,10 +84,6 @@ class _DialogoGastoFijoState extends ConsumerState<DialogoGastoFijo> {
 
   @override
   Widget build(BuildContext context) {
-    final categorias = (ref.watch(categoriasControladorProvider).valueOrNull ?? [])
-        .where((c) => c.tipo == 'gasto')
-        .toList();
-
     return AlertDialog(
       title: Text(
         widget.aEditar == null ? 'Nuevo gasto fijo' : 'Editar gasto fijo',
@@ -111,15 +107,10 @@ class _DialogoGastoFijoState extends ConsumerState<DialogoGastoFijo> {
               decoration: const InputDecoration(prefixText: '\$ ', hintText: 'Monto mensual'),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<int?>(
-              initialValue: _categoriaId,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Categoría (opcional)'),
-              items: [
-                const DropdownMenuItem<int?>(value: null, child: Text('Otros Gastos')),
-                ...categorias.map((c) => DropdownMenuItem<int?>(value: c.id, child: Text(c.nombre))),
-              ],
-              onChanged: (v) => setState(() => _categoriaId = v),
+            SelectorCategoriaPlan(
+              tipo: TipoPlan.fijo,
+              categoriaId: _categoriaId,
+              alCambiar: (id) => setState(() => _categoriaId = id),
             ),
             const SizedBox(height: 16),
             DropdownButtonFormField<int>(

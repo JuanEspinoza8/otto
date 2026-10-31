@@ -242,12 +242,7 @@ class ServicioPlanes {
       final existe = await _db.query('categorias', where: 'id = ? AND tipo = ?', whereArgs: [p.categoriaId, tipo]);
       if (existe.isNotEmpty) return p.categoriaId!;
     }
-    final preferida = switch (p.tipo) {
-      TipoPlan.sueldo => 'sueldo',
-      TipoPlan.cuotas => 'deudas',
-      TipoPlan.fijo => 'otros gastos',
-    };
-    return _categoria(tipo, preferida);
+    return _categoria(tipo, p.tipo.categoriaPorDefecto);
   }
 
   Future<int> _categoria(String tipo, String nombre) async {

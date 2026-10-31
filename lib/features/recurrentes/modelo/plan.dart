@@ -10,6 +10,14 @@ enum TipoPlan {
   final String valor;
 
   static TipoPlan desdeValor(String valor) => values.firstWhere((t) => t.valor == valor);
+
+  /// Nombre, en minúsculas, de la categoría que usa un plan sin categoría
+  /// propia. Si no existe, se usa la primera "Otros…" del tipo.
+  String get categoriaPorDefecto => switch (this) {
+        TipoPlan.sueldo => 'sueldo',
+        TipoPlan.cuotas => 'deudas',
+        TipoPlan.fijo => 'otros gastos',
+      };
 }
 
 /// Un compromiso mensual: un gasto fijo, una compra en cuotas o el sueldo.
