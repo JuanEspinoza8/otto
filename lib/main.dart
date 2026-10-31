@@ -6,9 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/base_de_datos/gestor_base_datos.dart';
 import 'core/tema/tema_app.dart';
 import 'core/ui/pantalla_error_base.dart';
+import 'core/seguridad/proteccion_app.dart';
 import 'core/ui/enrutador_principal.dart';
-import 'core/ui/widgets/filtro_privacidad.dart';
-import 'core/ui/widgets/bloqueo_biometrico.dart';
 import 'features/configuracion/logica/servicio_notificaciones.dart';
 import 'features/configuracion/logica/onboarding_provider.dart';
 import 'features/configuracion/logica/tema_provider.dart';
@@ -33,13 +32,11 @@ void main() async {
   // Inicializar notificaciones locales
   await ServicioNotificaciones.inicializar();
 
-  // Reprogramar recordatorios diarios si el usuario los tiene activos.
+  // Reprogramar los recordatorios diarios si están activos y hay permiso.
   try {
     final prefs = await SharedPreferences.getInstance();
-    final activos = prefs.getBool('recordatorioDiario') ?? true;
-    if (activos) {
-      final horarios = prefs.getStringList('horariosRecordatorios') ?? ['20:00'];
-      await ServicioNotificaciones.reprogramarNotificaciones(horarios);
+    if ((prefs.getBool('recordatorioDiario') ?? false) && await ServicioNotificaciones.permisoConcedido()) {
+      await ServicioNotificaciones.reprogramarNotificaciones(prefs.getStringList('horariosRecordatorios') ?? ['20:00']);
     }
   } catch (_) {/* no bloquear el arranque por notificaciones */}
 
@@ -63,6 +60,8 @@ class AplicacionFinanzas extends ConsumerWidget {
       theme: TemaApp.obtenerTemaClaro(),
       darkTheme: TemaApp.obtenerTemaOscuro(),
       themeMode: modoTema,
+      // Por encima del Navigator: el bloqueo tapa también rutas y diálogos.
+      builder: (context, child) => ProteccionApp(child: child!),
       home: const _SelectorInicial(),
     );
   }
@@ -87,11 +86,7 @@ class _SelectorInicial extends ConsumerWidget {
       ),
       data: (completado) {
         if (completado) {
-          return const FiltroPrivacidad(
-            child: BloqueoBiometrico(
-              child: EnrutadorPrincipal(),
-            ),
-          );
+          return const EnrutadorPrincipal();
         }
 
         return PantallaOnboarding(
