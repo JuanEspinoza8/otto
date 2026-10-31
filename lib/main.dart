@@ -56,7 +56,7 @@ class AppOtto extends ConsumerWidget {
       darkTheme: TemaApp.obtenerTemaOscuro(),
       themeMode: ref.watch(temaControladorProvider),
       // Por encima del Navigator: el bloqueo tapa también rutas y diálogos.
-      builder: (context, child) => ProteccionApp(child: child!),
+      builder: (context, child) => BarraDeEstadoDelTema(child: ProteccionApp(child: child!)),
       home: ref.watch(onboardingControladorProvider)
           ? const EnrutadorPrincipal()
           : const PantallaOnboarding(),

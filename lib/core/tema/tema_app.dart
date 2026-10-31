@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Colores semánticos dependientes del tema, expuestos como [ThemeExtension].
 ///
@@ -124,6 +125,9 @@ class TemaApp {
       dividerColor: colores.borde,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
+        // Con fondo transparente el AppBar deduce íconos blancos también en
+        // el tema claro.
+        systemOverlayStyle: barraDeEstado(brillo),
         elevation: 0,
         foregroundColor: colores.textoPrimario,
         centerTitle: true,
@@ -153,4 +157,27 @@ class TemaApp {
 
   static ThemeData obtenerTemaOscuro() => obtenerTema(Brightness.dark);
   static ThemeData obtenerTemaClaro() => obtenerTema(Brightness.light);
+
+  /// Barra de estado transparente con íconos que contrastan con el fondo del
+  /// tema: oscuros en el claro y claros en el oscuro.
+  static SystemUiOverlayStyle barraDeEstado(Brightness brillo) => SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: brillo == Brightness.dark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: brillo,
+      );
+}
+
+/// Aplica [TemaApp.barraDeEstado] a las pantallas sin AppBar (Categorías, por
+/// ejemplo). Las que tienen uno usan el estilo del [AppBarTheme], que queda
+/// por encima.
+class BarraDeEstadoDelTema extends StatelessWidget {
+  const BarraDeEstadoDelTema({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
+        value: TemaApp.barraDeEstado(Theme.of(context).brightness),
+        child: child,
+      );
 }
