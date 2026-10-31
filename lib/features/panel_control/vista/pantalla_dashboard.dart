@@ -12,7 +12,7 @@ import 'widget_resumen_tarjetas.dart';
 import 'widget_top_gastos.dart';
 import 'widget_metas.dart';
 import 'widget_resumen_disponible.dart';
-import 'widget_chat_monedita.dart';
+import '../../otto/vista/widget_chat_otto.dart';
 import 'widget_dolar_blue.dart';
 import 'widget_graficos.dart';
 import 'widget_ultimos_movimientos.dart';
@@ -219,8 +219,8 @@ class _PantallaDashboardState extends ConsumerState<PantallaDashboard> {
             const WidgetMetas(),
             const SizedBox(height: 24),
 
-            // Chat Monedita
-            const WidgetChatMonedita(),
+            // Chat con Otto
+            const WidgetChatOtto(),
             const SizedBox(height: 24),
 
             // Gráficos

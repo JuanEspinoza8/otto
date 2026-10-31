@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/libro/consultas_libro.dart';
+import '../../../core/libro/libro_providers.dart';
 import '../../../core/tema/tema_app.dart';
+import '../../../core/utilidades/fechas.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import '../../../core/ui/widgets/mascota_otto.dart';
 import '../../categorias/logica/categorias_provider.dart';
 import '../logica/metas_provider.dart';
 import '../logica/servicio_resumen_mes.dart';
-import '../logica/servicio_ia_contador.dart';
-import '../../../core/dinero/dinero.dart';
+import '../../configuracion/logica/ajustes_provider.dart';
+import '../../otto/logica/servicio_ia_contador.dart';
 
 /// Pantalla de resumen de un mes: ingresos, egresos por categoría y sobrante,
 /// con una devolución de la IA en rol de contador.
@@ -37,14 +40,19 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
   }
 
   Future<void> _cargar() async {
-    final cats = ref.read(categoriasControladorProvider).valueOrNull ?? [];
-    final resumen = await ServicioResumenMes.calcular(widget.mes, cats);
+    final cats = await ref.read(categoriasControladorProvider.future);
+    final db = await ref.read(baseDatosProvider.future);
+    final resumen = await ServicioResumenMes.calcular(ConsultasLibro(db), Periodo.de(widget.mes), cats);
     if (!mounted) return;
     setState(() => _resumen = resumen);
 
-    // Devolución de IA (contador).
-    final metasMap = ref.read(metasControladorProvider).valueOrNull ?? {};
-    final metasResumen = metasMap.keys
+    // Devolución de Otto contador (solo con la IA activa; se cachea por mes).
+    if (!(await ref.read(ajustesControladorProvider.future)).iaActiva) {
+      if (mounted) setState(() => _cargandoIa = false);
+      return;
+    }
+    final metas = await ref.read(metasControladorProvider.future);
+    final metasResumen = metas
         .map((m) => '${m.nombre} ${m.porcentajeProgreso.toInt()}%')
         .join(', ');
     final texto = await ServicioIaContador.evaluar(resumen, metasResumen: metasResumen);
@@ -80,7 +88,7 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
                     const SizedBox(height: 8),
                     Center(
                       child: FittedBox(
-                        child: Text(Dinero.desdeUnidades(r.totalIngresos).formatear(),
+                        child: Text(r.totalIngresos.formatear(),
                             style: const TextStyle(color: TemaApp.verde, fontSize: 48, fontWeight: FontWeight.bold)),
                       ),
                     ),
@@ -100,15 +108,15 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
                       decoration: BoxDecoration(
                         color: context.colores.superficie,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: (r.sobrante >= 0 ? TemaApp.verde : TemaApp.rojo).withValues(alpha: 0.5)),
+                        border: Border.all(color: (r.sobrante.esNegativo ? TemaApp.rojo : TemaApp.verde).withValues(alpha: 0.5)),
                       ),
                       child: Column(
                         children: [
                           Text('TE QUEDÓ', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
                           const SizedBox(height: 6),
                           FittedBox(
-                            child: Text(Dinero.desdeUnidades(r.sobrante).formatear(),
-                                style: TextStyle(color: r.sobrante >= 0 ? TemaApp.verde : TemaApp.rojo, fontSize: 40, fontWeight: FontWeight.bold)),
+                            child: Text(r.sobrante.formatear(),
+                                style: TextStyle(color: r.sobrante.esNegativo ? TemaApp.rojo : TemaApp.verde, fontSize: 40, fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
@@ -135,7 +143,7 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
           ),
           const SizedBox(width: 12),
           Expanded(child: Text(l.nombre, style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.w600))),
-          Text('${esIngreso ? '+' : '-'}${Dinero.desdeUnidades(l.monto).formatear()}',
+          Text('${esIngreso ? '+' : '-'}${l.monto.formatear()}',
               style: TextStyle(color: esIngreso ? TemaApp.verde : TemaApp.rojo, fontWeight: FontWeight.bold)),
         ],
       ),
