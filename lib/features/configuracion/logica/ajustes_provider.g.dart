@@ -7,7 +7,7 @@ part of 'ajustes_provider.dart';
 // **************************************************************************
 
 String _$ajustesControladorHash() =>
-    r'5486d9e77b4cf4197878276beb902007a410d4f3';
+    r'521f93cf782568586c513ca389fbd2beec1ee72b';
 
 /// See also [AjustesControlador].
 @ProviderFor(AjustesControlador)

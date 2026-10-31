@@ -107,6 +107,8 @@ class AjustesControlador extends _$AjustesControlador {
     ref.invalidateSelf();
   }
 
+  Future<void> activarRecordatorioDiario() => alternarRecordatorioDiario(true);
+
   /// Para activarlo pide el permiso de notificaciones; si se niega, queda
   /// apagado y se avisa.
   Future<void> alternarRecordatorioDiario(bool valor) async {
