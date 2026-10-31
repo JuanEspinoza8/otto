@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../../core/libro/consultas_libro.dart';
 import '../../../core/tema/tema_app.dart';
-import '../../../core/ui/widgets/tarjeta_movimiento.dart';
-import '../../../core/ui/widgets/categoria_ahorro.dart';
+import '../../../core/utilidades/texto.dart';
+import '../logica/mes_seleccionado_provider.dart';
 import '../logica/movimientos_provider.dart';
-import '../../categorias/logica/categorias_provider.dart';
-import '../../panel_control/logica/metas_provider.dart';
+import 'fila_movimiento.dart';
 
 class PantallaTodosMovimientos extends ConsumerStatefulWidget {
   const PantallaTodosMovimientos({super.key});
@@ -16,7 +18,6 @@ class PantallaTodosMovimientos extends ConsumerStatefulWidget {
 
 class _PantallaTodosMovimientosState extends ConsumerState<PantallaTodosMovimientos> {
   final ScrollController _controladorScroll = ScrollController();
-  String _busqueda = '';
 
   @override
   void initState() {
@@ -26,37 +27,29 @@ class _PantallaTodosMovimientosState extends ConsumerState<PantallaTodosMovimien
 
   @override
   void dispose() {
-    _controladorScroll.removeListener(_alHacerScroll);
     _controladorScroll.dispose();
     super.dispose();
   }
 
   void _alHacerScroll() {
     if (_controladorScroll.position.pixels >= _controladorScroll.position.maxScrollExtent - 200) {
-      ref.read(movimientosControladorProvider.notifier).cargarMas();
+      ref.read(movimientosBuscadosProvider.notifier).cargarMas();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final movimientos = ref.watch(movimientosFiltradosProvider);
-    final categorias = ref.watch(categoriasControladorProvider).valueOrNull ?? [];
-    final metas = (ref.watch(metasControladorProvider).valueOrNull ?? {}).keys;
-    final filtroActivo = ref.watch(filtroMovimientosProvider);
-
-    // Sobre lo ya filtrado por tipo, aplicamos la búsqueda por texto (concepto o
-    // categoría) y ocultamos los movimientos sin categoría válida.
-    final visibles = movimientos.where((mov) {
-      if (!mov.esAhorro && !categorias.any((c) => c.id == mov.categoriaId)) return false;
-      if (_busqueda.isEmpty) return true;
-      final cat = categoriaDeMovimiento(mov, categorias, metas);
-      return '${mov.descripcion ?? ''} ${cat.nombre}'.toLowerCase().contains(_busqueda);
-    }).toList();
+    final movimientosAsync = ref.watch(movimientosBuscadosProvider);
+    final hayMas = ref.watch(movimientosBuscadosProvider.notifier).hayMasDatos;
+    final filtroActivo = ref.watch(criteriosBusquedaProvider).filtro;
+    final mes = ref.watch(mesSeleccionadoProvider);
+    final movimientos = movimientosAsync.valueOrNull ?? const [];
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
       appBar: AppBar(
-        title: Text('Todos los Movimientos', style: TextStyle(color: context.colores.textoPrimario)),
+        title: Text('Movimientos de ${DateFormat('MMMM', 'es').format(mes)}',
+            style: TextStyle(color: context.colores.textoPrimario)),
         backgroundColor: context.colores.fondo,
         elevation: 0,
         iconTheme: IconThemeData(color: context.colores.textoPrimario),
@@ -68,7 +61,7 @@ class _PantallaTodosMovimientosState extends ConsumerState<PantallaTodosMovimien
             child: Column(
               children: [
                 TextField(
-                  onChanged: (v) => setState(() => _busqueda = v.trim().toLowerCase()),
+                  onChanged: (v) => ref.read(criteriosBusquedaProvider.notifier).buscar(v),
                   style: TextStyle(color: context.colores.textoPrimario),
                   decoration: InputDecoration(
                     isDense: true,
@@ -81,10 +74,7 @@ class _PantallaTodosMovimientosState extends ConsumerState<PantallaTodosMovimien
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _chipFiltro(context, 'Todos', 'todos', filtroActivo),
-                      _chipFiltro(context, 'Ingresos', 'ingreso', filtroActivo),
-                      _chipFiltro(context, 'Gastos', 'gasto', filtroActivo),
-                      _chipFiltro(context, 'Ahorros', 'ahorro', filtroActivo),
+                      for (final filtro in FiltroMovimientos.values) _chipFiltro(context, filtro, filtroActivo),
                     ],
                   ),
                 ),
@@ -92,50 +82,41 @@ class _PantallaTodosMovimientosState extends ConsumerState<PantallaTodosMovimien
             ),
           ),
           Expanded(
-            child: visibles.isEmpty
-                ? Center(
-                    child: Text('No hay movimientos para mostrar.', style: TextStyle(color: context.colores.textoSecundario)),
-                  )
-                : ListView.builder(
-                    controller: _controladorScroll,
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    itemCount: visibles.length + 1,
-                    itemBuilder: (context, index) {
-                      if (index == visibles.length) {
-                        final controlador = ref.watch(movimientosControladorProvider.notifier);
-                        return controlador.hayMasDatos
-                            ? const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
-                            : const SizedBox(height: 24);
-                      }
-                      final mov = visibles[index];
-                      final categoria = categoriaDeMovimiento(mov, categorias, metas);
-                      return TarjetaMovimiento(
-                        movimiento: mov,
-                        categoria: categoria,
-                        alEliminar: () {
-                          if (mov.esAhorro) {
-                            ref.read(metasControladorProvider.notifier).revertirAporte(mov);
-                          } else {
-                            ref.read(movimientosControladorProvider.notifier).eliminarMovimiento(mov.id!);
+            child: movimientosAsync.isLoading && movimientos.isEmpty
+                ? const Center(child: CircularProgressIndicator(color: TemaApp.verde))
+                : movimientos.isEmpty
+                    ? Center(
+                        child: Text('No hay movimientos para mostrar.',
+                            style: TextStyle(color: context.colores.textoSecundario)),
+                      )
+                    : ListView.builder(
+                        controller: _controladorScroll,
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        itemCount: movimientos.length + 1,
+                        itemBuilder: (context, index) {
+                          if (index == movimientos.length) {
+                            return hayMas
+                                ? const Center(child: Padding(padding: EdgeInsets.all(16.0), child: CircularProgressIndicator()))
+                                : const SizedBox(height: 24);
                           }
+                          final mov = movimientos[index];
+                          return FilaMovimiento(key: ValueKey(mov.id), movimiento: mov);
                         },
-                      );
-                    },
-                  ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _chipFiltro(BuildContext context, String texto, String valor, String activo) {
-    final sel = activo == valor;
+  Widget _chipFiltro(BuildContext context, FiltroMovimientos filtro, FiltroMovimientos activo) {
+    final sel = activo == filtro;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: ChoiceChip(
-        label: Text(texto),
+        label: Text(capitalizar(filtro.name)),
         selected: sel,
-        onSelected: (_) => ref.read(filtroMovimientosProvider.notifier).cambiarFiltro(valor),
+        onSelected: (_) => ref.read(criteriosBusquedaProvider.notifier).filtrar(filtro),
         selectedColor: TemaApp.verde.withValues(alpha: 0.2),
         labelStyle: TextStyle(
           color: sel ? TemaApp.verde : context.colores.textoSecundario,

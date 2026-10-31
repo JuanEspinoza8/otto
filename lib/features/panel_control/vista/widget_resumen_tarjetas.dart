@@ -1,28 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/consultas_libro.dart';
+import '../../../core/libro/libro_providers.dart';
 import '../../../core/tema/tema_app.dart';
 import '../logica/dashboard_provider.dart';
-import '../logica/ahorro_disponible_provider.dart';
+import '../logica/dolar_blue_provider.dart';
 import '../logica/metas_provider.dart';
-import '../../../core/dinero/dinero.dart';
 
 /// Formatea un monto según el modo elegido (0: K, 1: M/m, 2: exacto).
-String formatearMontoResumen(double m, int modo) {
+String formatearMontoResumen(Dinero monto, int modo) {
+  final unidades = monto.unidades.abs();
+  final signo = monto.esNegativo ? '-' : '';
+  final simbolo = monto.moneda.simbolo;
   switch (modo) {
-    case 1: // Millones / miles
-      if (m >= 1000000) return '${(m / 1000000).toStringAsFixed(2).replaceAll('.', ',')}M';
-      if (m >= 1000) return '${(m / 1000).round()}m';
-      return Dinero.desdeUnidades(m).formatear(simbolo: false);
-    case 2: // Exacto
-      return Dinero.desdeUnidades(m).formatear(simbolo: false);
-    default: // K
-      if (m >= 1000) return '${(m / 1000).round()}K';
-      return Dinero.desdeUnidades(m).formatear(simbolo: false);
+    case 1:
+      if (unidades >= 1000000) return '$signo$simbolo${(unidades / 1000000).toStringAsFixed(2).replaceAll('.', ',')}M';
+      if (unidades >= 1000) return '$signo$simbolo${(unidades / 1000).round()}m';
+      return monto.formatear();
+    case 2:
+      return monto.formatear();
+    default:
+      if (unidades >= 1000) return '$signo$simbolo${(unidades / 1000).round()}K';
+      return monto.formatear();
   }
 }
 
-/// Widget que muestra las 4 tarjetas superiores del dashboard.
-/// Al tocar cualquiera de los montos grandes se cicla el formato (K / M / exacto).
+/// Tarjetas superiores del dashboard. Al tocar un monto se cicla el formato
+/// (K / M / exacto).
 class WidgetResumenTarjetas extends ConsumerStatefulWidget {
   const WidgetResumenTarjetas({super.key});
 
@@ -37,15 +43,11 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
 
   @override
   Widget build(BuildContext context) {
-    final resumen = ref.watch(resumenMensualProvider).valueOrNull ?? const <String, double>{};
-    final progresoMeta = ref.watch(progresoMetaTotalProvider);
-    final disponible = ref.watch(ahorroDisponibleProvider);
-
-    final cantIngresos = resumen['cantidadIngresos']?.toInt() ?? 0;
-    final cantGastos = resumen['cantidadGastos']?.toInt() ?? 0;
-    final porcentajeMeta = progresoMeta['porcentaje'] ?? 0;
-    final montoDineroMeta = progresoMeta['montoObjetivo'] ?? 0;
-    final cantMetas = progresoMeta['cantidadMetas']?.toInt() ?? 0;
+    final totales = ref.watch(totalesMesProvider).valueOrNull ?? const TotalesMes();
+    final progreso = ref.watch(progresoMetasProvider);
+    final disponible = ref.watch(disponibleProvider).valueOrNull ?? const Dinero.cero();
+    final dolares = ref.watch(patrimonioDolaresProvider).valueOrNull;
+    final blue = ref.watch(dolarBlueProvider).valueOrNull?.venta;
 
     return Column(
       children: [
@@ -54,10 +56,10 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
             Expanded(
               child: _TarjetaResumen(
                 titulo: 'INGRESOS',
-                monto: resumen['ingresos'] ?? 0,
+                monto: totales.ingresos,
                 formato: _formato,
                 onTapMonto: _ciclarFormato,
-                subMontoText: '$cantIngresos movimientos',
+                subMontoText: '${totales.cantidadIngresos} movimientos',
                 colorBg: TemaApp.verde,
                 colorText: Colors.white,
               ),
@@ -66,10 +68,10 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
             Expanded(
               child: _TarjetaResumen(
                 titulo: 'GASTOS',
-                monto: resumen['gastos'] ?? 0,
+                monto: totales.gastos,
                 formato: _formato,
                 onTapMonto: _ciclarFormato,
-                subMontoText: '$cantGastos movimientos',
+                subMontoText: '${totales.cantidadGastos} movimientos',
                 colorBg: TemaApp.rojo,
                 colorText: Colors.white,
               ),
@@ -85,7 +87,7 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
                 monto: disponible,
                 formato: _formato,
                 onTapMonto: _ciclarFormato,
-                subtitulo: 'Plata libre para gastar o ahorrar',
+                subtitulo: 'Pesos libres para gastar o ahorrar',
                 colorBg: context.colores.superficie,
               ),
             ),
@@ -107,13 +109,11 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      cantMetas > 0 ? '${porcentajeMeta.floor()}%' : '—',
+                      progreso.cantidad > 0 ? '${progreso.porcentaje.floor()}%' : '—',
                       style: TextStyle(color: context.colores.textoPrimario, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                     Text(
-                      cantMetas > 0
-                          ? 'de ${Dinero.desdeUnidades(montoDineroMeta).formatear()} en $cantMetas metas'
-                          : 'Sin metas activas',
+                      progreso.cantidad > 0 ? 'en ${progreso.cantidad} metas' : 'Sin metas activas',
                       style: TextStyle(color: context.colores.textoSecundario, fontSize: 10),
                     ),
                   ],
@@ -122,14 +122,70 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
             ),
           ],
         ),
+        if (dolares != null && dolares.total.esPositivo) ...[
+          const SizedBox(height: 12),
+          _TarjetaDolares(dolares: dolares, blue: blue),
+        ],
       ],
+    );
+  }
+}
+
+/// Dólares del usuario, aparte del disponible: no se mezclan con los pesos
+/// para que el disponible no cambie cuando se mueve el blue.
+class _TarjetaDolares extends StatelessWidget {
+  const _TarjetaDolares({required this.dolares, required this.blue});
+
+  final PatrimonioDolares dolares;
+  final double? blue;
+
+  @override
+  Widget build(BuildContext context) {
+    final enPesos = dolares.enPesos(blue);
+    final detalle = [
+      if (dolares.libres.esPositivo) '${dolares.libres.formatear()} libres',
+      if (dolares.enMetas.esPositivo) '${dolares.enMetas.formatear()} en metas',
+    ].join(' · ');
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: context.colores.superficie,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.colores.borde),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.attach_money, color: TemaApp.azul),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('DÓLARES', style: TextStyle(color: context.colores.textoSecundario, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+                const SizedBox(height: 4),
+                Text(detalle, style: TextStyle(color: context.colores.textoSecundario, fontSize: 11)),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(dolares.total.formatear(), style: const TextStyle(color: TemaApp.azul, fontSize: 18, fontWeight: FontWeight.bold)),
+              if (enPesos != null)
+                Text('≈ ${enPesos.formatear(abreviado: true)} al blue',
+                    style: TextStyle(color: context.colores.textoSecundario, fontSize: 10)),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _TarjetaResumen extends StatelessWidget {
   final String titulo;
-  final double monto;
+  final Dinero monto;
   final int formato;
   final VoidCallback onTapMonto;
   final Color colorBg;
@@ -177,10 +233,10 @@ class _TarjetaResumen extends StatelessWidget {
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
               child: Text(
-                '${monto < 0 ? '-' : ''}\$${formatearMontoResumen(monto.abs(), formato)}',
+                formatearMontoResumen(monto, formato),
                 maxLines: 1,
                 style: TextStyle(
-                  color: colorText ?? (monto < 0 ? TemaApp.rojo : TemaApp.verde),
+                  color: colorText ?? (monto.esNegativo ? TemaApp.rojo : TemaApp.verde),
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
                 ),

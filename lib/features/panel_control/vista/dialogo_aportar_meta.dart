@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/tema/tema_app.dart';
-import '../logica/ahorro_disponible_provider.dart';
-import '../logica/ahorros_provider.dart';
-import '../logica/dashboard_provider.dart';
-import '../logica/dolar_blue_provider.dart';
-import '../logica/metas_provider.dart';
-import '../modelo/meta.dart';
 import '../../../core/dinero/dinero.dart';
 import '../../../core/dinero/formateador_monto.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../../../core/libro/modelo/meta.dart';
+import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
+import '../logica/dolar_blue_provider.dart';
+import '../logica/metas_provider.dart';
 
-/// Diálogo para aportar dinero a una meta de ahorro (o eliminarla).
+/// Diálogo para aportar pesos del disponible a una meta. Si la meta es en
+/// dólares, se convierte al blue de hoy y se guardan dólares.
 class DialogoAportarMeta extends ConsumerStatefulWidget {
   final Meta meta;
   const DialogoAportarMeta({super.key, required this.meta});
@@ -26,6 +26,7 @@ class DialogoAportarMeta extends ConsumerStatefulWidget {
 
 class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
   final _monto = TextEditingController();
+  bool _guardando = false;
 
   @override
   void dispose() {
@@ -34,52 +35,42 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
   }
 
   Future<void> _aportar() async {
-    // Siempre se ingresa en PESOS (es lo que tiene el usuario).
-    final pesos = (Dinero.parsear(_monto.text)?.unidades ?? 0);
-    if (pesos <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresá un monto a aportar')),
-      );
+    final pesos = Dinero.parsear(_monto.text);
+    if (pesos == null || !pesos.esPositivo) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresá un monto a aportar')));
       return;
     }
-    // Sólo validamos el tope si el disponible ya cargó del todo (si no, sería
-    // parcial y daría un número equivocado).
-    final datosListos = ref.read(ahorrosControladorProvider).hasValue && ref.read(totalesGlobalesProvider).hasValue;
-    final disponible = ref.read(ahorroDisponibleProvider);
-    if (datosListos && pesos > disponible + 0.5) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No te alcanza. Disponible: ${Dinero.desdeUnidades(disponible).formatear()}')),
-      );
-      return;
+    setState(() => _guardando = true);
+    // El servicio valida contra el disponible y el objetivo dentro de la
+    // transacción, así no importa si las pantallas tienen datos viejos.
+    final ok = await ejecutarConAviso(
+      context,
+      () => ref.read(metasControladorProvider.notifier).aportar(widget.meta, pesos),
+      exito: 'Aportaste ${pesos.formatear()} a "${widget.meta.nombre}"',
+    );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _guardando = false);
     }
-
-    final blue = ref.read(dolarBlueProvider).valueOrNull?['venta'] ?? 0.0;
-    if (widget.meta.esUsd && blue <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Esperá a que cargue la cotización del dólar')),
-      );
-      return;
-    }
-
-    await ref.read(metasControladorProvider.notifier).aportar(widget.meta, pesos, blue: blue);
-    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final meta = widget.meta;
-    final disponible = ref.watch(ahorroDisponibleProvider);
-    final blue = ref.watch(dolarBlueProvider).valueOrNull?['venta'] ?? 0.0;
-    final simbolo = meta.esUsd ? 'U\$D' : '\$';
+    final disponible = ref.watch(disponibleProvider).valueOrNull ?? const Dinero.cero();
+    final blue = ref.watch(dolarBlueProvider).valueOrNull?.venta;
+    final hayCotizacion = blue != null && blue > 0;
 
-    // Lo que falta de la meta, expresado en PESOS (para los botones rápidos).
-    final restanteMeta = (meta.montoObjetivo - meta.montoActual).clamp(0.0, double.infinity);
-    final restanteEnPesos = meta.esUsd ? restanteMeta * blue : restanteMeta;
-    final aFalta = restanteEnPesos < disponible ? restanteEnPesos : disponible;
+    // Lo que falta de la meta, en pesos (para el botón rápido).
+    final Dinero? faltaEnPesos = !meta.esUsd
+        ? meta.falta
+        : (hayCotizacion ? meta.falta.convertir(Moneda.ars, blue) : null);
+    final sugerido = faltaEnPesos?.min(disponible);
 
-    // Conversión en vivo de lo escrito (si es meta USD).
-    final pesosEscritos = (Dinero.parsear(_monto.text)?.unidades ?? 0);
-    final usdEquivalente = (meta.esUsd && blue > 0) ? pesosEscritos / blue : 0;
+    final escritos = Dinero.parsear(_monto.text);
+    final equivalente = (meta.esUsd && hayCotizacion && escritos != null) ? escritos.convertir(Moneda.usd, blue) : null;
 
     return AlertDialog(
       title: Text(meta.nombre, style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.bold)),
@@ -88,7 +79,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Ahorrado: $simbolo${Dinero.desdeUnidades(meta.montoActual).formatear(simbolo: false)} de $simbolo${Dinero.desdeUnidades(meta.montoObjetivo).formatear(simbolo: false)}',
+            'Ahorrado: ${meta.saldo.formatear()} de ${meta.objetivo.formatear()}',
             style: TextStyle(color: context.colores.textoSecundario, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -104,51 +95,48 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
           const SizedBox(height: 12),
           Row(
             children: [
-              Icon(Icons.account_balance_wallet_outlined, size: 16, color: disponible > 0 ? TemaApp.verde : TemaApp.rojo),
+              Icon(Icons.account_balance_wallet_outlined, size: 16, color: disponible.esPositivo ? TemaApp.verde : TemaApp.rojo),
               const SizedBox(width: 6),
               Text(
-                'Disponible: ${Dinero.desdeUnidades(disponible).formatear()}',
-                style: TextStyle(color: disponible > 0 ? TemaApp.verde : TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 13),
+                'Disponible: ${disponible.formatear()}',
+                style: TextStyle(color: disponible.esPositivo ? TemaApp.verde : TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _monto,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [FormateadorMonto()],
             style: TextStyle(color: context.colores.textoPrimario),
             onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(
-              prefixText: '\$ ',
-              hintText: meta.esUsd ? 'Pesos a aportar' : 'Monto a aportar',
-            ),
+            decoration: InputDecoration(prefixText: r'$ ', hintText: meta.esUsd ? 'Pesos a aportar' : 'Monto a aportar'),
           ),
           if (meta.esUsd) ...[
             const SizedBox(height: 6),
             Text(
-              blue > 0
-                  ? 'Se convierte a ≈ U\$D ${usdEquivalente.toStringAsFixed(2)} (blue ${Dinero.desdeUnidades(blue).formatear()})'
-                  : 'Esperando cotización del dólar…',
+              hayCotizacion
+                  ? 'Se guarda como ≈ ${(equivalente ?? const Dinero.cero(Moneda.usd)).formatear()} (blue ${Dinero.desdeUnidades(blue).formatear()})'
+                  : 'Esperando la cotización del dólar…',
               style: const TextStyle(color: TemaApp.azul, fontSize: 11),
             ),
           ],
           const SizedBox(height: 10),
-          if (disponible <= 0)
-            Text('No tenés plata disponible para asignar. Cargá ingresos o ahorros previos.',
+          if (!disponible.esPositivo)
+            Text('No tenés plata disponible para asignar. Cargá ingresos o el ahorro previo.',
                 style: TextStyle(color: context.colores.textoSecundario, fontSize: 11))
           else
             Wrap(
               spacing: 8,
               children: [
-                if (aFalta > 0)
+                if (sugerido != null && sugerido.esPositivo)
                   ActionChip(
-                    label: Text('Lo que falta (${Dinero.desdeUnidades(aFalta).formatear()})'),
-                    onPressed: () => setState(() => _monto.text = Dinero.desdeUnidades(aFalta).textoEditable),
+                    label: Text('Lo que falta (${sugerido.formatear()})'),
+                    onPressed: () => setState(() => _monto.text = sugerido.formatear(simbolo: false)),
                   ),
                 ActionChip(
-                  label: Text('Todo lo disponible (${Dinero.desdeUnidades(disponible).formatear()})'),
-                  onPressed: () => setState(() => _monto.text = Dinero.desdeUnidades(disponible).textoEditable),
+                  label: Text('Todo lo disponible (${disponible.formatear()})'),
+                  onPressed: () => setState(() => _monto.text = disponible.formatear(simbolo: false)),
                 ),
               ],
             ),
@@ -160,7 +148,7 @@ class _DialogoAportarMetaState extends ConsumerState<DialogoAportarMeta> {
           child: Text('Cancelar', style: TextStyle(color: context.colores.textoSecundario)),
         ),
         ElevatedButton(
-          onPressed: _aportar,
+          onPressed: _guardando ? null : _aportar,
           style: ElevatedButton.styleFrom(backgroundColor: TemaApp.verde, foregroundColor: Colors.white),
           child: const Text('Aportar'),
         ),

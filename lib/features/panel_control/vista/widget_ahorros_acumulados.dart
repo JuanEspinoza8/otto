@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/tema/tema_app.dart';
-import '../logica/ahorros_provider.dart';
-import '../logica/dolar_blue_provider.dart';
+
 import '../../../core/dinero/dinero.dart';
 import '../../../core/dinero/formateador_monto.dart';
+import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
+import '../logica/ahorros_provider.dart';
 
-/// Widget que muestra los ahorros acumulados (ARS + USD) con
-/// conversión en tiempo real usando el dólar blue.
+/// Ahorro previo: la plata que el usuario ya tenía antes de usar la app.
+/// Los pesos son el saldo inicial del disponible; los dólares, el de la
+/// cuenta "Dólares" (se muestran aparte).
 class WidgetAhorrosAcumulados extends ConsumerStatefulWidget {
   const WidgetAhorrosAcumulados({super.key});
 
@@ -16,52 +18,47 @@ class WidgetAhorrosAcumulados extends ConsumerStatefulWidget {
 }
 
 class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulados> {
-  final _controladorArs = TextEditingController();
-  final _controladorUsd = TextEditingController();
-  bool _editandoArs = false;
-  bool _editandoUsd = false;
+  final _ars = TextEditingController();
+  final _usd = TextEditingController();
+  bool _cargado = false;
 
   @override
   void dispose() {
-    _controladorArs.dispose();
-    _controladorUsd.dispose();
+    _ars.dispose();
+    _usd.dispose();
     super.dispose();
+  }
+
+  Future<void> _guardar(Moneda moneda) async {
+    final controlador = moneda == Moneda.ars ? _ars : _usd;
+    final monto = controlador.text.trim().isEmpty
+        ? Dinero.cero(moneda)
+        : Dinero.parsear(controlador.text, moneda: moneda);
+    if (monto == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Monto inválido')));
+      return;
+    }
+    final notifier = ref.read(ahorroPrevioControladorProvider.notifier);
+    await ejecutarConAviso(
+      context,
+      () => moneda == Moneda.ars ? notifier.fijarArs(monto) : notifier.fijarUsd(monto),
+      exito: 'Ahorro previo actualizado',
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final ahorrosAsync = ref.watch(ahorrosControladorProvider);
-    final dolarAsync = ref.watch(dolarBlueProvider);
+    final ahorroAsync = ref.watch(ahorroPrevioControladorProvider);
 
-    return ahorrosAsync.when(
+    return ahorroAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Text('Error: $e', style: const TextStyle(color: Colors.red)),
-      data: (ahorros) {
-        final dolar = dolarAsync.valueOrNull;
-        final cotizacionVenta = dolar?['venta'] ?? 0.0;
-
-        // Calcular total acumulado
-        final usdEnArs = ahorros.ahorroPrevioUsd * cotizacionVenta;
-        final totalAcumulado = ahorros.ahorroPrevioArs + usdEnArs;
-
-        // Sincronizar controladores si no estamos editando
-        if (!_editandoArs) {
-          final textoArs = ahorros.ahorroPrevioArs > 0
-              ? Dinero.desdeUnidades(ahorros.ahorroPrevioArs).formatear(simbolo: false)
-              : '';
-          if (_controladorArs.text != textoArs) {
-            _controladorArs.text = textoArs;
-          }
+      error: (e, _) => Text('No se pudo leer el ahorro previo', style: TextStyle(color: context.colores.textoSecundario)),
+      data: (ahorro) {
+        if (!_cargado) {
+          _ars.text = ahorro.ars.textoEditable;
+          _usd.text = ahorro.usd.textoEditable;
+          _cargado = true;
         }
-        if (!_editandoUsd) {
-          final textoUsd = ahorros.ahorroPrevioUsd > 0
-              ? Dinero.desdeUnidades(ahorros.ahorroPrevioUsd).formatear(simbolo: false)
-              : '';
-          if (_controladorUsd.text != textoUsd) {
-            _controladorUsd.text = textoUsd;
-          }
-        }
-
         return Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -76,106 +73,57 @@ class _WidgetAhorrosAcumuladosState extends ConsumerState<WidgetAhorrosAcumulado
                 children: [
                   Container(width: 8, height: 8, decoration: const BoxDecoration(color: TemaApp.azul, shape: BoxShape.circle)),
                   const SizedBox(width: 8),
-                  Text('AHORRO PREVIO', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colores.textoSecundario, letterSpacing: 1.1)),
+                  Text('AHORRO PREVIO',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colores.textoSecundario, letterSpacing: 1.1)),
                 ],
               ),
               const SizedBox(height: 4),
-              Text('La plata que ya tenías ahorrada antes de usar la app. Se suma a tu disponible.',
-                  style: TextStyle(color: context.colores.textoSecundario, fontSize: 11)),
+              Text(
+                'La plata que ya tenías antes de usar la app. Los pesos se suman a tu disponible; los dólares se muestran aparte.',
+                style: TextStyle(color: context.colores.textoSecundario, fontSize: 11),
+              ),
               const SizedBox(height: 16),
               Row(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('AHORRO PREVIO ARS', style: TextStyle(fontSize: 10, color: context.colores.textoSecundario, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _controladorArs,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FormateadorMonto()],
-                          onTap: () => setState(() => _editandoArs = true),
-                          onSubmitted: (valor) {
-                            _editandoArs = false;
-                            final monto = (Dinero.parsear(valor)?.unidades ?? 0);
-                            ref.read(ahorrosControladorProvider.notifier).actualizarArs(monto);
-                          },
-                          onTapOutside: (_) {
-                            if (_editandoArs) {
-                              _editandoArs = false;
-                              final monto = (Dinero.parsear(_controladorArs.text)?.unidades ?? 0);
-                              ref.read(ahorrosControladorProvider.notifier).actualizarArs(monto);
-                            }
-                          },
-                          decoration: InputDecoration(
-                            prefixText: '\$ ',
-                            hintText: '0',
-                            filled: true,
-                            fillColor: context.colores.superficieAlta,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _campo(context, 'PESOS', _ars, Moneda.ars)),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('AHORRO PREVIO USD', style: TextStyle(fontSize: 10, color: context.colores.textoSecundario, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        TextField(
-                          controller: _controladorUsd,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FormateadorMonto()],
-                          onTap: () => setState(() => _editandoUsd = true),
-                          onSubmitted: (valor) {
-                            _editandoUsd = false;
-                            final monto = (Dinero.parsear(valor)?.unidades ?? 0);
-                            ref.read(ahorrosControladorProvider.notifier).actualizarUsd(monto);
-                          },
-                          onTapOutside: (_) {
-                            if (_editandoUsd) {
-                              _editandoUsd = false;
-                              final monto = (Dinero.parsear(_controladorUsd.text)?.unidades ?? 0);
-                              ref.read(ahorrosControladorProvider.notifier).actualizarUsd(monto);
-                            }
-                          },
-                          decoration: InputDecoration(
-                            prefixText: 'u\$s ',
-                            hintText: '0',
-                            filled: true,
-                            fillColor: context.colores.superficieAlta,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  Expanded(child: _campo(context, 'DÓLARES', _usd, Moneda.usd)),
                 ],
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Total acumulado ARS', style: TextStyle(color: context.colores.textoSecundario, fontSize: 10)),
-                    Text(
-                      Dinero.desdeUnidades(totalAcumulado).formatear(),
-                      style: const TextStyle(color: TemaApp.verde, fontSize: 24, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  Widget _campo(BuildContext context, String titulo, TextEditingController controlador, Moneda moneda) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(titulo, style: TextStyle(fontSize: 10, color: context.colores.textoSecundario, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controlador,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [FormateadorMonto()],
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _guardar(moneda),
+          decoration: InputDecoration(
+            prefixText: '${moneda.simbolo} ',
+            hintText: '0',
+            filled: true,
+            fillColor: context.colores.superficieAlta,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.check, size: 18, color: TemaApp.verde),
+              tooltip: 'Guardar',
+              onPressed: () => _guardar(moneda),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

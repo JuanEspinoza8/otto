@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/tema/tema_app.dart';
-import '../../categorias/logica/categorias_provider.dart';
-import '../logica/movimientos_provider.dart';
-import '../modelo/movimiento.dart';
 import '../../../core/dinero/dinero.dart';
 import '../../../core/dinero/formateador_monto.dart';
+import '../../../core/libro/modelo/movimiento.dart';
+import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
+import '../../categorias/logica/categorias_provider.dart';
+import '../logica/movimientos_provider.dart';
 
 /// Diálogo para editar un movimiento existente (monto, concepto, categoría
 /// y fecha). El tipo (ingreso/gasto) se mantiene fijo.
@@ -35,11 +36,10 @@ class _DialogoEditarMovimientoState extends ConsumerState<DialogoEditarMovimient
   @override
   void initState() {
     super.initState();
-    _monto = TextEditingController(text: Dinero.desdeUnidades(widget.movimiento.monto).textoEditable);
+    _monto = TextEditingController(text: widget.movimiento.monto.textoEditable);
     _concepto = TextEditingController(text: widget.movimiento.descripcion ?? '');
     _fecha = widget.movimiento.fecha;
-    // Los aportes de ahorro no llegan a este editor (no tienen botón de editar),
-    // así que categoriaId siempre viene con valor para ingresos/gastos.
+    // Solo se editan ingresos y gastos, que siempre tienen categoría.
     _categoriaId = widget.movimiento.categoriaId ?? 0;
   }
 
@@ -60,30 +60,38 @@ class _DialogoEditarMovimientoState extends ConsumerState<DialogoEditarMovimient
     if (sel != null) setState(() => _fecha = sel);
   }
 
+  bool _guardando = false;
+
   Future<void> _guardar() async {
-    final monto = (Dinero.parsear(_monto.text)?.unidades ?? 0);
-    if (monto <= 0) {
+    final monto = Dinero.parsear(_monto.text);
+    if (monto == null || !monto.esPositivo) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ingresá un monto válido')),
       );
       return;
     }
-    await ref.read(movimientosControladorProvider.notifier).actualizarMovimiento(
-          Movimiento(
-            id: widget.movimiento.id,
+    setState(() => _guardando = true);
+    final ok = await ejecutarConAviso(
+      context,
+      () => ref.read(movimientosControladorProvider.notifier).editar(
+            widget.movimiento,
             monto: monto,
-            fecha: _fecha,
-            descripcion: _concepto.text.trim().isEmpty ? null : _concepto.text.trim(),
-            tipo: widget.movimiento.tipo,
             categoriaId: _categoriaId,
+            fecha: _fecha,
+            descripcion: _concepto.text,
           ),
-        );
-    if (mounted) Navigator.pop(context);
+    );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context);
+    } else {
+      setState(() => _guardando = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final tipo = widget.movimiento.tipo;
+    final tipo = widget.movimiento.tipo.valor;
     final categorias = (ref.watch(categoriasControladorProvider).valueOrNull ?? [])
         .where((c) => c.tipo == tipo)
         .toList();
@@ -155,7 +163,7 @@ class _DialogoEditarMovimientoState extends ConsumerState<DialogoEditarMovimient
           child: Text('Cancelar', style: TextStyle(color: context.colores.textoSecundario)),
         ),
         ElevatedButton(
-          onPressed: _guardar,
+          onPressed: _guardando ? null : _guardar,
           style: ElevatedButton.styleFrom(backgroundColor: TemaApp.verde, foregroundColor: Colors.white),
           child: const Text('Guardar'),
         ),

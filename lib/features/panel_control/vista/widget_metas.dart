@@ -1,29 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/libro/modelo/meta.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/ui/widgets/mascota_otto.dart';
-import '../logica/metas_provider.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
-import 'dialogo_nueva_meta.dart';
+import '../logica/metas_provider.dart';
 import 'dialogo_acciones_meta.dart';
-import '../../../core/dinero/dinero.dart';
+import 'dialogo_nueva_meta.dart';
 
-/// Widget que muestra las metas de ahorro con la mascota Monedita y progreso.
+/// Metas de ahorro con la mascota Otto y el progreso total.
 class WidgetMetas extends ConsumerWidget {
   const WidgetMetas({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metasAsync = ref.watch(metasControladorProvider);
-    final progresoMeta = ref.watch(progresoMetaTotalProvider);
+    final progreso = ref.watch(progresoMetasProvider);
 
     return metasAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Text('Error: $e', style: const TextStyle(color: Colors.red)),
-      data: (metasConSubmetas) {
-        final tieneMetas = metasConSubmetas.isNotEmpty;
-        final porcentaje = progresoMeta['porcentaje'] ?? 0;
-        final montoActual = progresoMeta['montoActual'] ?? 0;
+      data: (metas) {
+        final tieneMetas = metas.isNotEmpty;
+        final porcentaje = progreso.porcentaje;
+        final guardado = [
+          if (progreso.guardadoArs.esPositivo || !progreso.guardadoUsd.esPositivo) progreso.guardadoArs.formatear(),
+          if (progreso.guardadoUsd.esPositivo) progreso.guardadoUsd.formatear(),
+        ].join(' + ');
 
         // Mensaje de ánimo de Otto según el progreso
         String mensaje;
@@ -83,7 +86,7 @@ class WidgetMetas extends ConsumerWidget {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Ahorraste ${Dinero.desdeUnidades(montoActual).formatear()}',
+                                'Ahorraste $guardado',
                                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colores.textoPrimario),
                               ),
                               Text(
@@ -110,43 +113,13 @@ class WidgetMetas extends ConsumerWidget {
               ),
               if (tieneMetas) ...[
                 const SizedBox(height: 16),
-                ...metasConSubmetas.entries.expand((entry) {
-                  final meta = entry.key;
-                  final submetas = entry.value;
-
-                  if (submetas.isEmpty) {
-                    // Si la meta no tiene submetas, mostrarla directamente.
-                    // Al tocarla se abre el diálogo para aportar/eliminar.
-                    return [
-                      GestureDetector(
-                        onTap: () => DialogoAccionesMeta.mostrar(context, meta),
-                        child: _TarjetaSubmeta(
-                          icono: MapeadorIconos.obtenerIcono(meta.icono),
-                          nombre: meta.nombre,
-                          montoActual: meta.montoActual,
-                          montoObjetivo: meta.montoObjetivo,
-                          porcentaje: meta.porcentajeProgreso.toInt(),
-                          mostrarFlecha: true,
-                          simbolo: meta.esUsd ? 'U\$D' : '\$',
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ];
-                  }
-
-                  // Si tiene submetas, mostrar cada una
-                  return submetas.expand((sub) => [
-                    _TarjetaSubmeta(
-                      icono: MapeadorIconos.obtenerIcono(sub.icono),
-                      nombre: sub.nombre,
-                      montoActual: sub.montoActual,
-                      montoObjetivo: sub.montoObjetivo,
-                      porcentaje: sub.porcentajeProgreso.toInt(),
-                      simbolo: meta.esUsd ? 'U\$D' : '\$',
-                    ),
-                    const SizedBox(height: 8),
-                  ]);
-                }),
+                for (final meta in metas) ...[
+                  GestureDetector(
+                    onTap: () => DialogoAccionesMeta.mostrar(context, meta),
+                    child: _TarjetaMeta(meta: meta),
+                  ),
+                  const SizedBox(height: 8),
+                ],
               ],
               const SizedBox(height: 8),
               SizedBox(
@@ -173,31 +146,9 @@ class WidgetMetas extends ConsumerWidget {
   }
 }
 
-class _TarjetaSubmeta extends StatelessWidget {
-  final IconData icono;
-  final String nombre;
-  final double montoActual;
-  final double montoObjetivo;
-  final int porcentaje;
-  final bool mostrarFlecha;
-  final String simbolo;
-
-  const _TarjetaSubmeta({
-    required this.icono,
-    required this.nombre,
-    required this.montoActual,
-    required this.montoObjetivo,
-    required this.porcentaje,
-    this.mostrarFlecha = false,
-    this.simbolo = '\$',
-  });
-
-  String _formatearMonto(double monto) {
-    if (monto >= 1000) {
-      return '$simbolo${(monto / 1000).toStringAsFixed(0)}K';
-    }
-    return '$simbolo${Dinero.desdeUnidades(monto).formatear(simbolo: false)}';
-  }
+class _TarjetaMeta extends StatelessWidget {
+  final Meta meta;
+  const _TarjetaMeta({required this.meta});
 
   @override
   Widget build(BuildContext context) {
@@ -206,25 +157,23 @@ class _TarjetaSubmeta extends StatelessWidget {
       decoration: BoxDecoration(color: context.colores.superficieAlta, borderRadius: BorderRadius.circular(12)),
       child: Row(
         children: [
-          Icon(icono, color: TemaApp.azul, size: 24),
+          Icon(MapeadorIconos.obtenerIcono(meta.icono), color: TemaApp.azul, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(nombre, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colores.textoPrimario)),
+                Text(meta.nombre, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: context.colores.textoPrimario)),
                 Text(
-                  '${_formatearMonto(montoActual)} / ${_formatearMonto(montoObjetivo)}',
+                  '${meta.saldo.formatear(abreviado: true)} / ${meta.objetivo.formatear(abreviado: true)}',
                   style: TextStyle(color: context.colores.textoSecundario, fontSize: 10),
                 ),
               ],
             ),
           ),
-          Text('$porcentaje%', style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold, fontSize: 12)),
-          if (mostrarFlecha) ...[
-            const SizedBox(width: 6),
-            const Icon(Icons.add_circle, color: TemaApp.verde, size: 18),
-          ],
+          Text('${meta.porcentajeProgreso.toInt()}%', style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold, fontSize: 12)),
+          const SizedBox(width: 6),
+          const Icon(Icons.add_circle, color: TemaApp.verde, size: 18),
         ],
       ),
     );

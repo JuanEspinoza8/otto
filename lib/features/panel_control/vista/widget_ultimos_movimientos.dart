@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../movimientos/logica/movimientos_provider.dart';
-import '../../categorias/logica/categorias_provider.dart';
-import '../logica/metas_provider.dart';
-import '../../../core/ui/widgets/tarjeta_movimiento.dart';
-import '../../../core/ui/widgets/categoria_ahorro.dart';
+import '../../movimientos/vista/fila_movimiento.dart';
 import '../../movimientos/vista/pantalla_todos_movimientos.dart';
 
 /// Widget que muestra los últimos movimientos del mes en el dashboard.
@@ -14,12 +11,7 @@ class WidgetUltimosMovimientos extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final movimientosAsync = ref.watch(movimientosControladorProvider);
-    final categoriasAsync = ref.watch(categoriasControladorProvider);
-    final metas = (ref.watch(metasControladorProvider).valueOrNull ?? {}).keys;
-
-    final movimientos = movimientosAsync.valueOrNull ?? [];
-    final categorias = categoriasAsync.valueOrNull ?? [];
+    final movimientos = ref.watch(movimientosControladorProvider).valueOrNull ?? const [];
     final ultimosMovimientos = movimientos.take(3).toList();
 
     return Column(
@@ -41,23 +33,10 @@ class WidgetUltimosMovimientos extends ConsumerWidget {
             ),
           )
         else
-          ...ultimosMovimientos.map((m) {
-            final categoria = categoriaDeMovimiento(m, categorias, metas);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
-              child: TarjetaMovimiento(
-                movimiento: m,
-                categoria: categoria,
-                alEliminar: () {
-                  if (m.esAhorro) {
-                    ref.read(metasControladorProvider.notifier).revertirAporte(m);
-                  } else {
-                    ref.read(movimientosControladorProvider.notifier).eliminarMovimiento(m.id!);
-                  }
-                },
-              ),
-            );
-          }),
+          ...ultimosMovimientos.map((m) => Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: FilaMovimiento(movimiento: m),
+              )),
         if (ultimosMovimientos.isNotEmpty) ...[
           const SizedBox(height: 4),
           SizedBox(

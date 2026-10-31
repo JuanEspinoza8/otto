@@ -6,58 +6,34 @@ part of 'dashboard_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$resumenMensualHash() => r'9e31c9a839bfaafbf34bf7dc3d1468dfe4f458ae';
+String _$totalesMesHash() => r'34b1eafc6fe97a10e013f38436a0351f2dc284b0';
 
-/// Resumen de ingresos/gastos/ahorro del mes seleccionado.
+/// Totales del mes seleccionado (sobre todos sus movimientos).
 ///
-/// IMPORTANTE: calcula sobre TODOS los movimientos del mes consultando la base
-/// (no la lista paginada de 30), para evitar totales incorrectos. Observa el
-/// controlador de movimientos sólo como disparador de recálculo.
-///
-/// Copied from [ResumenMensual].
-@ProviderFor(ResumenMensual)
-final resumenMensualProvider = AutoDisposeAsyncNotifierProvider<ResumenMensual,
-    Map<String, double>>.internal(
-  ResumenMensual.new,
-  name: r'resumenMensualProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$resumenMensualHash,
+/// Copied from [totalesMes].
+@ProviderFor(totalesMes)
+final totalesMesProvider = AutoDisposeFutureProvider<TotalesMes>.internal(
+  totalesMes,
+  name: r'totalesMesProvider',
+  debugGetCreateSourceHash:
+      const bool.fromEnvironment('dart.vm.product') ? null : _$totalesMesHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
-typedef _$ResumenMensual = AutoDisposeAsyncNotifier<Map<String, double>>;
-String _$totalesGlobalesHash() => r'579b97b037dc7d1f29f519afb943edcded60de40';
-
-/// Totales de TODO el histórico (no de un mes): {ingresos, gastos, ahorros}.
-/// Es la base para calcular la plata realmente disponible (saldo corrido).
-///
-/// Copied from [TotalesGlobales].
-@ProviderFor(TotalesGlobales)
-final totalesGlobalesProvider = AutoDisposeAsyncNotifierProvider<
-    TotalesGlobales, Map<String, double>>.internal(
-  TotalesGlobales.new,
-  name: r'totalesGlobalesProvider',
-  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
-      ? null
-      : _$totalesGlobalesHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
-
-typedef _$TotalesGlobales = AutoDisposeAsyncNotifier<Map<String, double>>;
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef TotalesMesRef = AutoDisposeFutureProviderRef<TotalesMes>;
 String _$gastosPorCategoriaHash() =>
-    r'222be420145ce703c175af5451a25fad3761bc70';
+    r'4fa4df7927d2b5b09a30dcd5a5870dcb591af7b3';
 
-/// Gastos del mes agrupados por categoría (clave "nombre|colorHex" → total).
-/// También sobre todos los movimientos del mes (no la lista paginada).
+/// Gastos del mes seleccionado por categoría ({categoriaId: total}).
 ///
-/// Copied from [GastosPorCategoria].
-@ProviderFor(GastosPorCategoria)
-final gastosPorCategoriaProvider = AutoDisposeAsyncNotifierProvider<
-    GastosPorCategoria, Map<String, double>>.internal(
-  GastosPorCategoria.new,
+/// Copied from [gastosPorCategoria].
+@ProviderFor(gastosPorCategoria)
+final gastosPorCategoriaProvider =
+    AutoDisposeFutureProvider<Map<int, Dinero>>.internal(
+  gastosPorCategoria,
   name: r'gastosPorCategoriaProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
@@ -66,26 +42,48 @@ final gastosPorCategoriaProvider = AutoDisposeAsyncNotifierProvider<
   allTransitiveDependencies: null,
 );
 
-typedef _$GastosPorCategoria = AutoDisposeAsyncNotifier<Map<String, double>>;
-String _$gastoPorCategoriaIdHash() =>
-    r'daeb7de4bbb094238855d40929bc19c781f5b4e0';
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef GastosPorCategoriaRef = AutoDisposeFutureProviderRef<Map<int, Dinero>>;
+String _$rankingGastosHash() => r'eefd025fde42f1bd9f947ceffc30a48d9282eb5c';
 
-/// Gastos del mes por categoria_id (para los presupuestos). Sobre TODOS los
-/// movimientos del mes (no la lista paginada de 30).
+/// Gastos del mes por categoría, de mayor a menor, con la categoría resuelta.
 ///
-/// Copied from [GastoPorCategoriaId].
-@ProviderFor(GastoPorCategoriaId)
-final gastoPorCategoriaIdProvider = AutoDisposeAsyncNotifierProvider<
-    GastoPorCategoriaId, Map<int, double>>.internal(
-  GastoPorCategoriaId.new,
-  name: r'gastoPorCategoriaIdProvider',
+/// Copied from [rankingGastos].
+@ProviderFor(rankingGastos)
+final rankingGastosProvider =
+    AutoDisposeFutureProvider<List<TotalCategoria>>.internal(
+  rankingGastos,
+  name: r'rankingGastosProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$gastoPorCategoriaIdHash,
+      : _$rankingGastosHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
-typedef _$GastoPorCategoriaId = AutoDisposeAsyncNotifier<Map<int, double>>;
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef RankingGastosRef = AutoDisposeFutureProviderRef<List<TotalCategoria>>;
+String _$resumenDelMesHash() => r'669b135d61fef78a5882ff9a126d7d18c034a0de';
+
+/// Ingresos y egresos por categoría del mes seleccionado.
+///
+/// Copied from [resumenDelMes].
+@ProviderFor(resumenDelMes)
+final resumenDelMesProvider =
+    AutoDisposeFutureProvider<ResumenMesData>.internal(
+  resumenDelMes,
+  name: r'resumenDelMesProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$resumenDelMesHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef ResumenDelMesRef = AutoDisposeFutureProviderRef<ResumenMesData>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

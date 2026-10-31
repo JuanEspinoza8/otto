@@ -1,40 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../../../features/movimientos/vista/dialogo_editar_movimiento.dart';
+import '../../libro/modelo/movimiento.dart';
 import '../../tema/tema_app.dart';
 import '../../utilidades/mapeador_iconos.dart';
-import '../../../features/movimientos/modelo/movimiento.dart';
-import '../../../features/movimientos/vista/dialogo_editar_movimiento.dart';
-import '../../../features/categorias/modelo/categoria.dart';
-import '../../../core/dinero/dinero.dart';
+import 'presentacion_movimiento.dart';
 
 class TarjetaMovimiento extends StatelessWidget {
   final Movimiento movimiento;
-  final Categoria categoria;
-  final VoidCallback alEliminar;
+  final PresentacionMovimiento presentacion;
+  final Future<void> Function() alEliminar;
 
   const TarjetaMovimiento({
     super.key,
     required this.movimiento,
-    required this.categoria,
+    required this.presentacion,
     required this.alEliminar,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Formatear monto según regla de moneda en Argentina (sin decimales para
-    // que montos grandes no desborden la tarjeta).
-    // "$" adelante (consistente con el resto) y hasta 2 decimales si los tiene.
-    final montoFormateado = Dinero.desdeUnidades(movimiento.monto).formatear();
-    final esIngreso = movimiento.tipo == 'ingreso';
-    final esAhorro = movimiento.tipo == 'ahorro';
-    // Color e ícono del monto: verde ingreso, azul ahorro, rojo gasto.
-    final colorMonto = esIngreso ? TemaApp.verde : (esAhorro ? TemaApp.azul : TemaApp.rojo);
-    final signoMonto = esIngreso ? '+' : (esAhorro ? '→ ' : '-');
-
-    // Fecha exacta del movimiento (día y mes), como en el diseño de referencia.
+    final p = presentacion;
+    final montoFormateado = p.monto.formatear();
+    // Verde lo que entra al disponible, rojo lo que sale, azul lo que va a metas.
+    final colorMonto = switch (p.sentido) {
+      SentidoMovimiento.entra => TemaApp.verde,
+      SentidoMovimiento.sale => TemaApp.rojo,
+      _ => TemaApp.azul,
+    };
     final fechaFormateada = DateFormat('d MMM', 'es').format(movimiento.fecha);
 
-    final colorCategoria = Color(int.parse(categoria.colorHex));
+    final colorCategoria = Color(int.parse(p.colorHex));
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -55,7 +52,7 @@ class TarjetaMovimiento extends StatelessWidget {
               color: colorCategoria.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(MapeadorIconos.obtenerIcono(categoria.icono), color: colorCategoria, size: 22),
+            child: Icon(MapeadorIconos.obtenerIcono(p.icono), color: colorCategoria, size: 22),
           ),
           const SizedBox(width: 12),
           // Concepto + (categoría · fecha). Ocupa todo el espacio libre.
@@ -67,7 +64,7 @@ class TarjetaMovimiento extends StatelessWidget {
                 Text(
                   movimiento.descripcion?.isNotEmpty == true
                       ? movimiento.descripcion!
-                      : categoria.nombre,
+                      : p.etiqueta,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -78,7 +75,7 @@ class TarjetaMovimiento extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${categoria.nombre} · $fechaFormateada',
+                  '${p.etiqueta} · $fechaFormateada',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(fontSize: 12, color: context.colores.textoSecundario),
@@ -93,7 +90,7 @@ class TarjetaMovimiento extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$signoMonto$montoFormateado',
+                '${p.signo}$montoFormateado',
                 maxLines: 1,
                 style: TextStyle(
                   fontSize: 16,
@@ -105,9 +102,8 @@ class TarjetaMovimiento extends StatelessWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Los aportes de ahorro no se editan: se borran para
-                  // deshacerlos y así vuelve la plata al disponible.
-                  if (!esAhorro)
+                  // Las transferencias no se editan: se borran para deshacerlas.
+                  if (!p.esTransferencia)
                     _BotonAccion(
                       icono: Icons.edit_outlined,
                       color: context.colores.textoSecundario,
@@ -136,7 +132,7 @@ class TarjetaMovimiento extends StatelessWidget {
       builder: (ctx) => AlertDialog(
         title: Text('Borrar movimiento', style: TextStyle(color: ctx.colores.textoPrimario)),
         content: Text(
-          '¿Seguro que querés borrar "${movimiento.descripcion?.isNotEmpty == true ? movimiento.descripcion : categoria.nombre}"? Esta acción no se puede deshacer.',
+          '¿Seguro que querés borrar "${movimiento.descripcion?.isNotEmpty == true ? movimiento.descripcion : presentacion.etiqueta}"? Esta acción no se puede deshacer.',
           style: TextStyle(color: ctx.colores.textoSecundario),
         ),
         actions: [
@@ -151,7 +147,7 @@ class TarjetaMovimiento extends StatelessWidget {
         ],
       ),
     );
-    if (confirmar == true) alEliminar();
+    if (confirmar == true) await alEliminar();
   }
 }
 

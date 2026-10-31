@@ -28,8 +28,7 @@ class WidgetDolarBlue extends ConsumerWidget {
       error: (_, __) => const _Badge(texto: '—'),
       data: (datos) {
         if (datos == null) return const _Badge(texto: '—');
-        final venta = datos['venta'] ?? 0;
-        return _Badge(texto: Dinero.desdeUnidades(venta).formatear());
+        return _Badge(texto: Dinero.desdeUnidades(datos.venta).formatear());
       },
     );
   }

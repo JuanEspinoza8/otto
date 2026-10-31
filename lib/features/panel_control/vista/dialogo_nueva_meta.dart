@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/tema/tema_app.dart';
-import '../../../core/utilidades/mapeador_iconos.dart';
-import '../logica/metas_provider.dart';
-import '../modelo/meta.dart';
 import '../../../core/dinero/dinero.dart';
 import '../../../core/dinero/formateador_monto.dart';
+import '../../../core/libro/modelo/meta.dart';
+import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
+import '../../../core/utilidades/mapeador_iconos.dart';
+import '../logica/metas_provider.dart';
 
 /// Diálogo para crear una nueva meta de ahorro.
 class DialogoNuevaMeta extends ConsumerStatefulWidget {
@@ -29,7 +30,7 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
   late final TextEditingController _controladorNombre;
   late final TextEditingController _controladorMonto;
   late String _icono;
-  late String _moneda;
+  late Moneda _moneda;
   bool _guardando = false;
 
   static const List<String> _iconos = [
@@ -42,9 +43,9 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
     super.initState();
     final m = widget.aEditar;
     _controladorNombre = TextEditingController(text: m?.nombre ?? '');
-    _controladorMonto = TextEditingController(text: Dinero.desdeUnidades(m?.montoObjetivo ?? 0).textoEditable);
+    _controladorMonto = TextEditingController(text: m?.objetivo.textoEditable ?? '');
     _icono = m?.icono ?? 'flight';
-    _moneda = m?.moneda ?? 'ARS';
+    _moneda = m?.moneda ?? Moneda.ars;
   }
 
   @override
@@ -56,49 +57,38 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
 
   Future<void> _guardar() async {
     final nombre = _controladorNombre.text.trim();
-    final monto = (Dinero.parsear(_controladorMonto.text)?.unidades ?? 0);
-
+    final objetivo = Dinero.parsear(_controladorMonto.text, moneda: _moneda);
     if (nombre.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresá un nombre para la meta')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresá un nombre para la meta')));
       return;
     }
-    if (monto <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ingresá un monto objetivo válido')),
-      );
+    if (objetivo == null || !objetivo.esPositivo) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresá un monto objetivo válido')));
       return;
     }
 
     setState(() => _guardando = true);
     final controlador = ref.read(metasControladorProvider.notifier);
     final editar = widget.aEditar;
-    if (editar != null) {
-      await controlador.actualizarMeta(editar.copiaCon(
-        nombre: nombre,
-        montoObjetivo: monto,
-        icono: _icono,
-        moneda: _moneda,
-      ));
+    final ok = await ejecutarConAviso(
+      context,
+      () => editar == null
+          ? controlador.crear(nombre: nombre, icono: _icono, objetivo: objetivo)
+          : controlador.editar(editar, nombre: nombre, icono: _icono, objetivo: objetivo),
+    );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.pop(context);
     } else {
-      await controlador.agregarMeta(Meta(
-        nombre: nombre,
-        montoObjetivo: monto,
-        icono: _icono,
-        moneda: _moneda,
-        fechaCreacion: DateTime.now(),
-      ));
+      setState(() => _guardando = false);
     }
-
-    if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    // Si la meta ya tiene plata adentro, no se puede cambiar la moneda (el monto
-    // guardado quedaría mal valuado).
-    final puedeCambiarMoneda = widget.aEditar == null || widget.aEditar!.montoActual <= 0;
+    // Con plata adentro no se puede cambiar la moneda (el servicio además lo
+    // rechaza si la meta tuvo movimientos).
+    final puedeCambiarMoneda = widget.aEditar == null || widget.aEditar!.saldo.esCero;
     return AlertDialog(
       backgroundColor: context.colores.superficie,
       title: Text(widget.aEditar == null ? 'Nueva meta de ahorro' : 'Editar meta', style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.bold)),
@@ -118,16 +108,16 @@ class _DialogoNuevaMetaState extends ConsumerState<DialogoNuevaMeta> {
               keyboardType: TextInputType.number,
               inputFormatters: [FormateadorMonto()],
               style: TextStyle(color: context.colores.textoPrimario),
-              decoration: InputDecoration(prefixText: _moneda == 'USD' ? 'U\$D ' : '\$ ', hintText: 'Monto objetivo'),
+              decoration: InputDecoration(prefixText: '${_moneda.simbolo} ', hintText: 'Monto objetivo'),
             ),
             const SizedBox(height: 16),
             Text('Moneda', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: _ChipMoneda(texto: 'Pesos (ARS)', activo: _moneda == 'ARS', onTap: puedeCambiarMoneda ? () => setState(() => _moneda = 'ARS') : null)),
+                Expanded(child: _ChipMoneda(texto: 'Pesos (ARS)', activo: _moneda == Moneda.ars, onTap: puedeCambiarMoneda ? () => setState(() => _moneda = Moneda.ars) : null)),
                 const SizedBox(width: 8),
-                Expanded(child: _ChipMoneda(texto: 'Dólares (USD)', activo: _moneda == 'USD', onTap: puedeCambiarMoneda ? () => setState(() => _moneda = 'USD') : null)),
+                Expanded(child: _ChipMoneda(texto: 'Dólares (USD)', activo: _moneda == Moneda.usd, onTap: puedeCambiarMoneda ? () => setState(() => _moneda = Moneda.usd) : null)),
               ],
             ),
             const SizedBox(height: 20),

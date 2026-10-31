@@ -15,7 +15,7 @@ class WidgetResumenDisponible extends ConsumerWidget {
     final mes = ref.watch(resumenAutoProvider).valueOrNull;
     if (mes == null) return const SizedBox.shrink();
 
-    final mesTxt = capitalizarMes(DateFormat('MMMM', 'es').format(mes));
+    final mesTxt = capitalizarMes(DateFormat('MMMM', 'es').format(mes.primerDia));
     final notifier = ref.read(resumenAutoProvider.notifier);
 
     return Container(
@@ -44,14 +44,14 @@ class WidgetResumenDisponible extends ConsumerWidget {
             children: [
               ElevatedButton(
                 onPressed: () {
-                  PantallaResumenMes.mostrar(context, mes);
+                  PantallaResumenMes.mostrar(context, mes.primerDia);
                   notifier.marcarVisto();
                 },
                 style: ElevatedButton.styleFrom(backgroundColor: TemaApp.azul, foregroundColor: Colors.white, elevation: 0),
                 child: const Text('Ver resumen', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
               TextButton(
-                onPressed: () => notifier.marcarVisto(),
+                onPressed: notifier.posponer,
                 child: Text('Después', style: TextStyle(color: context.colores.textoSecundario)),
               ),
             ],

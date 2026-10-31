@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../core/tema/tema_app.dart';
+import '../../../core/libro/consultas_libro.dart';
 import '../logica/dashboard_provider.dart';
 import 'pantalla_estadisticas.dart';
 
@@ -11,12 +12,13 @@ class WidgetGraficos extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final gastosCat = ref.watch(gastosPorCategoriaProvider).valueOrNull ?? const <String, double>{};
-    final resumen = ref.watch(resumenMensualProvider).valueOrNull ?? const <String, double>{};
-
-    final listGastos = gastosCat.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    final top3 = listGastos.take(3).toList();
+    final ranking = ref.watch(rankingGastosProvider).valueOrNull ?? const <TotalCategoria>[];
+    final totales = ref.watch(totalesMesProvider).valueOrNull ?? const TotalesMes();
+    final top3 = ranking.take(3).toList();
+    final ingresos = totales.ingresos.unidades;
+    final gastos = totales.gastos.unidades;
+    final ahorro = totales.resultado.esPositivo ? totales.resultado.unidades : 0.0;
+    final maximo = [ingresos, gastos, 1.0].reduce((a, b) => a > b ? a : b);
 
     return GestureDetector(
       onTap: () => PantallaEstadisticas.mostrar(context),
@@ -44,17 +46,22 @@ class WidgetGraficos extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 16),
-                if (gastosCat.isNotEmpty)
+                if (ranking.isNotEmpty)
                   SizedBox(
                     height: 120,
                     child: PieChart(
                       PieChartData(
                         sectionsSpace: 2,
                         centerSpaceRadius: 25,
-                        sections: gastosCat.entries.map((e) {
-                          final colorHex = e.key.split('|').length > 1 ? e.key.split('|')[1] : '0xFF9E9E9E';
-                          return PieChartSectionData(color: Color(int.parse(colorHex)), value: e.value, title: '', radius: 15);
-                        }).toList(),
+                        sections: [
+                          for (final e in ranking)
+                            PieChartSectionData(
+                              color: Color(int.parse(e.categoria.colorHex)),
+                              value: e.total.unidades,
+                              title: '',
+                              radius: 15,
+                            ),
+                        ],
                       ),
                     ),
                   )
@@ -62,8 +69,8 @@ class WidgetGraficos extends ConsumerWidget {
                   SizedBox(height: 120, child: Center(child: Text('Sin gastos', style: TextStyle(color: context.colores.textoSecundario)))),
                 const SizedBox(height: 16),
                 ...top3.map((e) {
-                  final nombre = e.key.split('|')[0];
-                  final colorHex = e.key.split('|').length > 1 ? e.key.split('|')[1] : '0xFF9E9E9E';
+                  final nombre = e.categoria.nombre;
+                  final colorHex = e.categoria.colorHex;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 4.0),
                     child: Row(
@@ -71,7 +78,7 @@ class WidgetGraficos extends ConsumerWidget {
                         Container(width: 6, height: 6, decoration: BoxDecoration(color: Color(int.parse(colorHex)), shape: BoxShape.circle)),
                         const SizedBox(width: 4),
                         Expanded(child: Text(nombre, style: TextStyle(fontSize: 10, color: context.colores.textoPrimario), overflow: TextOverflow.ellipsis)),
-                        Text(e.value >= 1000 ? '\$${(e.value / 1000).toStringAsFixed(0)}K' : '\$${e.value.toStringAsFixed(0)}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
+                        Text(e.total.formatear(abreviado: true), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
                       ],
                     ),
                   );
@@ -106,15 +113,15 @@ class WidgetGraficos extends ConsumerWidget {
                   child: BarChart(
                     BarChartData(
                       alignment: BarChartAlignment.spaceAround,
-                      maxY: ((resumen['ingresos'] ?? 0) > (resumen['gastos'] ?? 0) ? (resumen['ingresos'] ?? 0) : (resumen['gastos'] ?? 0)) * 1.2,
+                      maxY: maximo * 1.2,
                       barTouchData: BarTouchData(enabled: false),
                       titlesData: const FlTitlesData(show: false),
                       borderData: FlBorderData(show: false),
                       gridData: const FlGridData(show: false),
                       barGroups: [
-                        BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: resumen['ingresos'] ?? 0, color: TemaApp.verde, width: 20, borderRadius: BorderRadius.circular(2))]),
-                        BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: resumen['gastos'] ?? 0, color: TemaApp.rojo, width: 20, borderRadius: BorderRadius.circular(2))]),
-                        BarChartGroupData(x: 2, barRods: [BarChartRodData(toY: resumen['ahorro'] ?? 0, color: TemaApp.azul, width: 20, borderRadius: BorderRadius.circular(2))]),
+                        BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: ingresos, color: TemaApp.verde, width: 20, borderRadius: BorderRadius.circular(2))]),
+                        BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: gastos, color: TemaApp.rojo, width: 20, borderRadius: BorderRadius.circular(2))]),
+                        BarChartGroupData(x: 2, barRods: [BarChartRodData(toY: ahorro, color: TemaApp.azul, width: 20, borderRadius: BorderRadius.circular(2))]),
                       ],
                     ),
                   ),

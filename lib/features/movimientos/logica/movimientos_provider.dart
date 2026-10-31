@@ -1,88 +1,125 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../modelo/movimiento.dart';
-import '../repositorio/movimiento_repositorio.dart';
+
+import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/consultas_libro.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../../../core/libro/modelo/movimiento.dart';
+import '../../../core/utilidades/fechas.dart';
 import 'mes_seleccionado_provider.dart';
 
 part 'movimientos_provider.g.dart';
 
+const int _tamanioPagina = 30;
+
+/// Movimientos del mes seleccionado, de a páginas de 30.
 @riverpod
 class MovimientosControlador extends _$MovimientosControlador {
-  // `final` (no `late final`): build() se re-ejecuta en cada invalidateSelf()
-  // y reasignar un `late final` lanzaría LateInitializationError.
-  final MovimientoRepositorio _repositorio = MovimientoRepositorio();
-  int _desplazamiento = 0;
-  final int _limite = 30;
-  bool _hayMasDatos = true;
+  bool _hayMas = true;
+  bool _cargando = false;
 
-  bool get hayMasDatos => _hayMasDatos;
+  bool get hayMasDatos => _hayMas;
 
   @override
-  FutureOr<List<Movimiento>> build() async {
-    _desplazamiento = 0;
-    _hayMasDatos = true;
-    return await _cargarPaginaInicial();
-  }
-
-  Future<List<Movimiento>> _cargarPaginaInicial() async {
-    final mesActual = ref.watch(mesSeleccionadoProvider);
-    final movimientos = await _repositorio.obtenerPaginados(limite: _limite, desplazamiento: _desplazamiento, mes: mesActual);
-    if (movimientos.length < _limite) {
-      _hayMasDatos = false;
-    }
-    return movimientos;
+  Future<List<Movimiento>> build() async {
+    final mes = Periodo.de(ref.watch(mesSeleccionadoProvider));
+    final pagina = await (await consultasLibro(ref)).movimientos(mes: mes, limite: _tamanioPagina);
+    _hayMas = pagina.length == _tamanioPagina;
+    return pagina;
   }
 
   Future<void> cargarMas() async {
-    if (!_hayMasDatos || state.isLoading) return;
-
-    _desplazamiento += _limite;
-    final mesActual = ref.read(mesSeleccionadoProvider);
-    final nuevosMovimientos = await _repositorio.obtenerPaginados(limite: _limite, desplazamiento: _desplazamiento, mes: mesActual);
-
-    if (nuevosMovimientos.length < _limite) {
-      _hayMasDatos = false;
+    final actuales = state.valueOrNull;
+    if (!_hayMas || _cargando || actuales == null) return;
+    _cargando = true;
+    try {
+      final mes = Periodo.de(ref.read(mesSeleccionadoProvider));
+      final db = await ref.read(baseDatosProvider.future);
+      final pagina = await ConsultasLibro(db).movimientos(
+        mes: mes,
+        limite: _tamanioPagina,
+        desplazamiento: actuales.length,
+      );
+      _hayMas = pagina.length == _tamanioPagina;
+      state = AsyncData([...actuales, ...pagina]);
+    } finally {
+      _cargando = false;
     }
-
-    if (state.hasValue) {
-      state = AsyncValue.data([...state.value!, ...nuevosMovimientos]);
-    }
   }
 
-  Future<void> agregarMovimiento(Movimiento movimiento) async {
-    await _repositorio.insertar(movimiento);
-    ref.invalidateSelf();
-  }
+  Future<int> registrar({
+    required TipoMovimiento tipo,
+    required Dinero monto,
+    required int categoriaId,
+    required DateTime fecha,
+    String? descripcion,
+  }) =>
+      escribirEnLibro(ref, (l) => l.registrar(
+            tipo: tipo,
+            monto: monto,
+            categoriaId: categoriaId,
+            fecha: fecha,
+            descripcion: descripcion,
+          ));
 
-  Future<void> actualizarMovimiento(Movimiento movimiento) async {
-    await _repositorio.actualizar(movimiento);
-    ref.invalidateSelf();
-  }
+  Future<void> editar(Movimiento m, {required Dinero monto, required int categoriaId, required DateTime fecha, String? descripcion}) =>
+      escribirEnLibro(ref, (l) => l.editar(m.id!, monto: monto, categoriaId: categoriaId, fecha: fecha, descripcion: descripcion));
 
-  Future<void> eliminarMovimiento(int id) async {
-    await _repositorio.eliminar(id);
-    ref.invalidateSelf();
-  }
+  Future<void> eliminar(int id) => escribirEnLibro(ref, (l) => l.eliminar(id));
+}
+
+/// Criterios de "Todos los movimientos".
+class BusquedaMovimientos {
+  const BusquedaMovimientos({this.filtro = FiltroMovimientos.todos, this.texto = ''});
+  final FiltroMovimientos filtro;
+  final String texto;
 }
 
 @riverpod
-class FiltroMovimientos extends _$FiltroMovimientos {
+class CriteriosBusqueda extends _$CriteriosBusqueda {
   @override
-  String build() => 'todos'; // 'todos', 'ingreso', 'gasto'
+  BusquedaMovimientos build() => const BusquedaMovimientos();
 
-  void cambiarFiltro(String filtro) {
-    state = filtro;
-  }
+  void filtrar(FiltroMovimientos filtro) => state = BusquedaMovimientos(filtro: filtro, texto: state.texto);
+  void buscar(String texto) => state = BusquedaMovimientos(filtro: state.filtro, texto: texto);
 }
 
+/// Movimientos del mes seleccionado con filtro y búsqueda resueltos en SQL
+/// (no sobre la página ya cargada), de a páginas.
 @riverpod
-List<Movimiento> movimientosFiltrados(MovimientosFiltradosRef ref) {
-  final filtro = ref.watch(filtroMovimientosProvider);
-  final movimientosAsync = ref.watch(movimientosControladorProvider);
+class MovimientosBuscados extends _$MovimientosBuscados {
+  bool _hayMas = true;
+  bool _cargando = false;
 
-  final movimientos = movimientosAsync.valueOrNull ?? [];
+  bool get hayMasDatos => _hayMas;
 
-  if (filtro == 'todos') {
-    return movimientos;
+  @override
+  Future<List<Movimiento>> build() async {
+    final criterios = ref.watch(criteriosBusquedaProvider);
+    final mes = Periodo.de(ref.watch(mesSeleccionadoProvider));
+    final pagina = await (await consultasLibro(ref))
+        .movimientos(mes: mes, filtro: criterios.filtro, busqueda: criterios.texto, limite: _tamanioPagina);
+    _hayMas = pagina.length == _tamanioPagina;
+    return pagina;
   }
-  return movimientos.where((m) => m.tipo == filtro).toList();
+
+  Future<void> cargarMas() async {
+    final actuales = state.valueOrNull;
+    if (!_hayMas || _cargando || actuales == null) return;
+    _cargando = true;
+    try {
+      final criterios = ref.read(criteriosBusquedaProvider);
+      final db = await ref.read(baseDatosProvider.future);
+      final pagina = await ConsultasLibro(db).movimientos(
+        mes: Periodo.de(ref.read(mesSeleccionadoProvider)),
+        filtro: criterios.filtro,
+        busqueda: criterios.texto,
+        limite: _tamanioPagina,
+        desplazamiento: actuales.length,
+      );
+      _hayMas = pagina.length == _tamanioPagina;
+      state = AsyncData([...actuales, ...pagina]);
+    } finally {
+      _cargando = false;
+    }
+  }
 }

@@ -41,7 +41,7 @@ class _BloqueoBiometricoState extends ConsumerState<BloqueoBiometrico> with Widg
   }
 
   bool get _biometriaActiva =>
-      ref.read(ajustesControladorProvider).valueOrNull?['biometriaActiva'] ?? false;
+      ref.read(ajustesControladorProvider).valueOrNull?.biometriaActiva ?? false;
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -93,7 +93,7 @@ class _BloqueoBiometricoState extends ConsumerState<BloqueoBiometrico> with Widg
       );
     }
 
-    final biometria = ajustesAsync.valueOrNull?['biometriaActiva'] ?? false;
+    final biometria = ajustesAsync.valueOrNull?.biometriaActiva ?? false;
     if (!biometria || _autenticado) return widget.child;
 
     // Primera vez que llegamos acá con biometría activa: pedimos la huella.

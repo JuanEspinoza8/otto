@@ -6,24 +6,24 @@ part of 'ahorros_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$ahorrosControladorHash() =>
-    r'347c7d35bcc349a0d01aa3657a6e00fb2b3d26e5';
+String _$ahorroPrevioControladorHash() =>
+    r'd166973c627ef52c16de295aa8e6f9b02bbcf690';
 
-/// Provider que gestiona los ahorros acumulados del usuario.
+/// Ahorro previo: el saldo inicial de "Libre ARS" y de "Dólares".
 ///
-/// Copied from [AhorrosControlador].
-@ProviderFor(AhorrosControlador)
-final ahorrosControladorProvider = AutoDisposeAsyncNotifierProvider<
-    AhorrosControlador, AhorrosAcumulados>.internal(
-  AhorrosControlador.new,
-  name: r'ahorrosControladorProvider',
+/// Copied from [AhorroPrevioControlador].
+@ProviderFor(AhorroPrevioControlador)
+final ahorroPrevioControladorProvider = AutoDisposeAsyncNotifierProvider<
+    AhorroPrevioControlador, AhorroPrevio>.internal(
+  AhorroPrevioControlador.new,
+  name: r'ahorroPrevioControladorProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$ahorrosControladorHash,
+      : _$ahorroPrevioControladorHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
-typedef _$AhorrosControlador = AutoDisposeAsyncNotifier<AhorrosAcumulados>;
+typedef _$AhorroPrevioControlador = AutoDisposeAsyncNotifier<AhorroPrevio>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

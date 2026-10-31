@@ -5,11 +5,10 @@ import 'package:intl/intl.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
-import '../../categorias/logica/categorias_provider.dart';
 import '../../movimientos/logica/mes_seleccionado_provider.dart';
-import '../logica/ahorro_disponible_provider.dart';
+import '../../../core/libro/consultas_libro.dart';
+import '../../../core/libro/libro_providers.dart';
 import '../logica/dashboard_provider.dart';
-import '../logica/metas_provider.dart';
 import '../logica/servicio_resumen_mes.dart';
 import '../../../core/dinero/dinero.dart';
 
@@ -27,10 +26,9 @@ class PantallaEstadisticas extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mes = ref.watch(mesSeleccionadoProvider);
-    final categorias = ref.watch(categoriasControladorProvider).valueOrNull ?? [];
-    final resumen = ref.watch(resumenMensualProvider).valueOrNull ?? const <String, double>{};
-    final disponible = ref.watch(ahorroDisponibleProvider);
-    final progresoMeta = ref.watch(progresoMetaTotalProvider);
+    final totales = ref.watch(totalesMesProvider).valueOrNull ?? const TotalesMes();
+    final disponible = ref.watch(disponibleProvider).valueOrNull ?? const Dinero.cero();
+    final resumenAsync = ref.watch(resumenDelMesProvider);
 
     final mesRaw = DateFormat('MMMM yyyy', 'es').format(mes);
     final mesTxt = mesRaw.isEmpty ? mesRaw : '${mesRaw[0].toUpperCase()}${mesRaw.substring(1)}';
@@ -43,19 +41,15 @@ class PantallaEstadisticas extends ConsumerWidget {
         elevation: 0,
         iconTheme: IconThemeData(color: context.colores.textoPrimario),
       ),
-      body: FutureBuilder<ResumenMesData>(
-        future: ServicioResumenMes.calcular(mes, categorias),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final data = snapshot.data!;
-
+      body: resumenAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('No se pudo armar el resumen', style: TextStyle(color: context.colores.textoSecundario))),
+        data: (data) {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               // Tarjetas resumen
-              _grillaResumen(context, resumen, disponible, progresoMeta),
+              _grillaResumen(context, totales, disponible),
               const SizedBox(height: 24),
 
               if (data.egresos.isNotEmpty) ...[
@@ -87,11 +81,11 @@ class PantallaEstadisticas extends ConsumerWidget {
     );
   }
 
-  Widget _grillaResumen(BuildContext context, Map<String, double> resumen, double disponible, Map<String, double> progresoMeta) {
-    final ingresos = resumen['ingresos'] ?? 0;
-    final gastos = resumen['gastos'] ?? 0;
-    final aportado = resumen['aportadoMetas'] ?? 0;
-    final tasaAhorro = ingresos > 0 ? ((ingresos - gastos) / ingresos * 100) : 0.0;
+  Widget _grillaResumen(BuildContext context, TotalesMes totales, Dinero disponible) {
+    final ingresos = totales.ingresos;
+    final gastos = totales.gastos;
+    final aportado = totales.aportadoAMetas;
+    final tasaAhorro = totales.porcentajeAhorro;
 
     return Column(
       children: [
@@ -136,7 +130,7 @@ class PantallaEstadisticas extends ConsumerWidget {
     );
   }
 
-  Widget _tarjeta(BuildContext context, String titulo, double monto, Color color) {
+  Widget _tarjeta(BuildContext context, String titulo, Dinero monto, Color color) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -152,7 +146,7 @@ class PantallaEstadisticas extends ConsumerWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(Dinero.desdeUnidades(monto).formatear(),
+            child: Text(monto.formatear(),
                 maxLines: 1, style: TextStyle(color: color, fontSize: 22, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -171,7 +165,7 @@ class PantallaEstadisticas extends ConsumerWidget {
     );
   }
 
-  Widget _tortaConLeyenda(BuildContext context, List<LineaResumen> lineas, double total) {
+  Widget _tortaConLeyenda(BuildContext context, List<LineaResumen> lineas, Dinero total) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -188,10 +182,10 @@ class PantallaEstadisticas extends ConsumerWidget {
                 sectionsSpace: 2,
                 centerSpaceRadius: 40,
                 sections: lineas.map((l) {
-                  final pct = total > 0 ? (l.monto / total * 100) : 0;
+                  final pct = total.esPositivo ? (l.monto.centavos / total.centavos * 100) : 0;
                   return PieChartSectionData(
                     color: Color(int.parse(l.colorHex)),
-                    value: l.monto,
+                    value: l.monto.unidades,
                     title: pct >= 8 ? '${pct.toStringAsFixed(0)}%' : '',
                     titleStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                     radius: 45,
@@ -208,8 +202,8 @@ class PantallaEstadisticas extends ConsumerWidget {
     );
   }
 
-  Widget _filaCategoria(BuildContext context, LineaResumen l, double total, Color color) {
-    final pct = total > 0 ? (l.monto / total * 100) : 0.0;
+  Widget _filaCategoria(BuildContext context, LineaResumen l, Dinero total, Color color) {
+    final pct = total.esPositivo ? (l.monto.centavos / total.centavos * 100) : 0.0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Row(
@@ -233,7 +227,7 @@ class PantallaEstadisticas extends ConsumerWidget {
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colores.textoPrimario)),
                     ),
                     const SizedBox(width: 8),
-                    Text(Dinero.desdeUnidades(l.monto).formatear(),
+                    Text(l.monto.formatear(),
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
                   ],
                 ),
