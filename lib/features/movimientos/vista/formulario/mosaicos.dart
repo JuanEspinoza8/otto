@@ -155,7 +155,7 @@ class SelectorMetas extends StatelessWidget {
           Mosaico(
             icono: MapeadorIconos.obtenerIcono(meta.icono),
             texto: meta.nombre,
-            subtitulo: '${meta.porcentajeProgreso.toInt()}%',
+            subtitulo: '${meta.porcentajeProgreso}%',
             color: TemaApp.azul,
             seleccionado: seleccionada?.id == meta.id,
             alTocar: () => alElegir(meta),

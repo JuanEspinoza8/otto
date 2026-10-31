@@ -75,7 +75,7 @@ class SeccionPresupuestos extends ConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(categoria.nombre, style: TextStyle(fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
-                          Text('${(ratio * 100).toInt()}%', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+                          Text('${gastado.porcentajeDe(limite)}%', style: TextStyle(color: color, fontWeight: FontWeight.bold)),
                         ],
                       ),
                       const SizedBox(height: 8),

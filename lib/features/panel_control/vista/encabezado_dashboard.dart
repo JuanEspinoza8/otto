@@ -15,7 +15,7 @@ String fraseDelMes(TotalesMes totales) {
   final resultado = totales.resultado;
   if (resultado.esNegativo) return 'Este mes gastaste ${(-resultado).formatear()} más de lo que entró.';
   if (totales.porcentajeAhorro >= 20) {
-    return '¡Vas muy bien! Te queda el ${totales.porcentajeAhorro.floor()}% de lo que entró.';
+    return '¡Vas muy bien! Te queda el ${totales.porcentajeAhorro}% de lo que entró.';
   }
   return 'Este mes te quedan ${resultado.formatear()} de lo que entró.';
 }

@@ -92,7 +92,7 @@ class _WidgetResumenTarjetasState extends ConsumerState<WidgetResumenTarjetas> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      progreso.cantidad > 0 ? '${progreso.porcentaje.floor()}%' : '—',
+                      progreso.cantidad > 0 ? '${progreso.porcentaje}%' : '—',
                       style: TextStyle(color: context.colores.textoPrimario, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
                     Text(

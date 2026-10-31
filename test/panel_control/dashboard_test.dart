@@ -32,6 +32,11 @@ void main() {
       final t = TotalesMes(ingresos: pesos(100000), gastos: pesos(60000), cantidadIngresos: 1, cantidadGastos: 3);
       expect(fraseDelMes(t), '¡Vas muy bien! Te queda el 40% de lo que entró.');
     });
+
+    test('el porcentaje no pierde un punto por la coma flotante', () {
+      final t = TotalesMes(ingresos: pesos(100000), gastos: pesos(71000), cantidadIngresos: 1, cantidadGastos: 3);
+      expect(fraseDelMes(t), '¡Vas muy bien! Te queda el 29% de lo que entró.');
+    });
   });
 
   testWidgets('el disponible es en pesos y los dólares van aparte', (tester) async {

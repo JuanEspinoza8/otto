@@ -26,11 +26,8 @@ class Meta {
   /// Lo que falta para el objetivo (nunca negativo).
   Dinero get falta => (objetivo - saldo).max(Dinero.cero(moneda));
 
-  /// Progreso de 0 a 100.
-  double get porcentajeProgreso {
-    if (!objetivo.esPositivo) return 0;
-    return (saldo.centavos / objetivo.centavos * 100).clamp(0, 100).toDouble();
-  }
+  /// Progreso de 0 a 100, truncado.
+  int get porcentajeProgreso => saldo.porcentajeDe(objetivo).clamp(0, 100);
 
   bool get cumplida => objetivo.esPositivo && saldo >= objetivo;
 

@@ -12,13 +12,13 @@ enum NivelPresupuesto {
   excedido,
 }
 
-const double umbralAlerta = 0.8;
+/// Porcentaje del presupuesto desde el que se avisa.
+const int umbralAlerta = 80;
 
 NivelPresupuesto nivelPresupuesto(Dinero gastado, Dinero limite) {
   if (!limite.esPositivo) return NivelPresupuesto.normal;
-  final ratio = gastado.centavos / limite.centavos;
-  if (ratio > 1) return NivelPresupuesto.excedido;
-  if (ratio >= umbralAlerta) return NivelPresupuesto.alerta;
+  if (gastado > limite) return NivelPresupuesto.excedido;
+  if (gastado.porcentajeDe(limite) >= umbralAlerta) return NivelPresupuesto.alerta;
   return NivelPresupuesto.normal;
 }
 
@@ -30,5 +30,5 @@ String? avisoPresupuesto(String categoria, Dinero antes, Dinero despues, Dinero 
   if (actual == previo || actual == NivelPresupuesto.normal) return null;
   return actual == NivelPresupuesto.excedido
       ? 'Te pasaste del presupuesto de $categoria por ${(despues - limite).formatear()}'
-      : 'Llegaste al ${(despues.centavos / limite.centavos * 100).floor()}% del presupuesto de $categoria';
+      : 'Llegaste al ${despues.porcentajeDe(limite)}% del presupuesto de $categoria';
 }

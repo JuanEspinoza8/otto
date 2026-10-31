@@ -37,7 +37,7 @@ class DialogoAccionesMeta extends ConsumerWidget {
             leading: Icon(MapeadorIconos.obtenerIcono(meta.icono), color: TemaApp.azul),
             title: Text(meta.nombre, style: TextStyle(fontWeight: FontWeight.bold, color: context.colores.textoPrimario)),
             subtitle: Text(
-              '${meta.saldo.formatear()} de ${meta.objetivo.formatear()} · ${meta.porcentajeProgreso.toInt()}%',
+              '${meta.saldo.formatear()} de ${meta.objetivo.formatear()} · ${meta.porcentajeProgreso}%',
               style: TextStyle(color: context.colores.textoSecundario),
             ),
           ),

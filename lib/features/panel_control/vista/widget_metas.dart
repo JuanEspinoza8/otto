@@ -90,7 +90,7 @@ class WidgetMetas extends ConsumerWidget {
                                 style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: context.colores.textoPrimario),
                               ),
                               Text(
-                                '${porcentaje.floor()}%',
+                                '$porcentaje%',
                                 style: const TextStyle(color: TemaApp.verde, fontSize: 12, fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -171,7 +171,7 @@ class _TarjetaMeta extends StatelessWidget {
               ],
             ),
           ),
-          Text('${meta.porcentajeProgreso.toInt()}%', style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold, fontSize: 12)),
+          Text('${meta.porcentajeProgreso}%', style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(width: 6),
           const Icon(Icons.add_circle, color: TemaApp.verde, size: 18),
         ],

@@ -121,7 +121,7 @@ class PantallaEstadisticas extends ConsumerWidget {
                 child: Text('Tasa de ahorro del mes (lo que no gastaste)',
                     style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
               ),
-              Text('${tasaAhorro.clamp(0, 100).toStringAsFixed(0)}%',
+              Text('${tasaAhorro.clamp(0, 100)}%',
                   style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),

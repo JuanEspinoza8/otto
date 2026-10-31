@@ -94,6 +94,15 @@ void main() {
     test('multiplica redondeando al centavo', () {
       expect(const Dinero(500000).por(1.5), const Dinero(750000));
     });
+
+    test('porcentaje con enteros', () {
+      // En coma flotante, x / 100.000 × 100 truncado da uno menos en estos.
+      for (final p in [29, 57, 58, 113, 114, 115, 116]) {
+        expect(Dinero.desdeUnidades(p * 1000).porcentajeDe(Dinero.desdeUnidades(100000)), p);
+      }
+      expect(const Dinero(79999).porcentajeDe(const Dinero(100000)), 79);
+      expect(const Dinero(5000).porcentajeDe(const Dinero.cero()), 0);
+    });
   });
 
   group('FormateadorMonto', () {

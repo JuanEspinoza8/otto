@@ -62,6 +62,15 @@ class Dinero implements Comparable<Dinero> {
   Dinero min(Dinero otro) => this <= otro ? this : otro;
   Dinero max(Dinero otro) => this >= otro ? this : otro;
 
+  /// Qué porcentaje de [total] es este monto, truncado y calculado con
+  /// enteros: 116.000 de 100.000 da 116 (en coma flotante 1,16 × 100 da
+  /// 115,99…). 0 si [total] no es positivo.
+  int porcentajeDe(Dinero total) {
+    _mismaMoneda(total);
+    if (!total.esPositivo) return 0;
+    return centavos * 100 ~/ total.centavos;
+  }
+
   /// Convierte a [destino] con una [cotizacion] expresada en pesos por dólar.
   Dinero convertir(Moneda destino, double cotizacion) {
     if (destino == moneda) return this;

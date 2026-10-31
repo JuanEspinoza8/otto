@@ -52,7 +52,7 @@ class ProgresoMetas {
 
   /// 0 a 100. Cada meta cuenta como máximo su objetivo, así una meta
   /// sobrepasada no tapa a otra incompleta.
-  final double porcentaje;
+  final int porcentaje;
   final Dinero guardadoArs;
   final Dinero guardadoUsd;
 }
@@ -72,18 +72,19 @@ ProgresoMetas progresoMetas(Ref ref) {
     }
   }
 
-  double porcentaje = 0;
+  var porcentaje = 0;
   final conObjetivo = metas.where((m) => m.objetivo.esPositivo).toList();
   final hayUsd = conObjetivo.any((m) => m.esUsd);
   if (conObjetivo.isNotEmpty && (!hayUsd || (blue != null && blue > 0))) {
-    // Todo en pesos para poder sumar metas de distinta moneda.
-    double enPesos(Dinero d) => d.moneda == Moneda.usd ? d.centavos * blue! : d.centavos.toDouble();
-    final objetivo = conObjetivo.fold<double>(0, (s, m) => s + enPesos(m.objetivo));
-    final avance = conObjetivo.fold<double>(0, (s, m) => s + enPesos(m.saldo.min(m.objetivo)));
-    porcentaje = objetivo > 0 ? (avance / objetivo * 100).clamp(0, 100) : 0;
+    // Todo en pesos para poder sumar metas de distinta moneda (sin dólares
+    // no hace falta la cotización: convertir pesos a pesos no la usa).
+    Dinero enPesos(Dinero d) => d.convertir(Moneda.ars, blue ?? 0);
+    final objetivo = conObjetivo.fold(const Dinero.cero(), (s, m) => s + enPesos(m.objetivo));
+    final avance = conObjetivo.fold(const Dinero.cero(), (s, m) => s + enPesos(m.saldo.min(m.objetivo)));
+    porcentaje = avance.porcentajeDe(objetivo).clamp(0, 100);
   } else if (conObjetivo.isNotEmpty) {
     // Sin cotización: promedio simple de las metas.
-    porcentaje = conObjetivo.fold<double>(0, (s, m) => s + m.porcentajeProgreso) / conObjetivo.length;
+    porcentaje = conObjetivo.fold(0, (s, m) => s + m.porcentajeProgreso) ~/ conObjetivo.length;
   }
 
   return ProgresoMetas(cantidad: metas.length, porcentaje: porcentaje, guardadoArs: ars, guardadoUsd: usd);

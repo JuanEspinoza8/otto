@@ -28,11 +28,9 @@ class TotalesMes {
   /// Ingresos menos gastos del mes.
   Dinero get resultado => ingresos - gastos;
 
-  /// Porcentaje de los ingresos que no se gastó (0 si no hubo ingresos).
-  double get porcentajeAhorro {
-    if (!ingresos.esPositivo || !resultado.esPositivo) return 0;
-    return resultado.centavos / ingresos.centavos * 100;
-  }
+  /// Porcentaje de los ingresos que no se gastó, truncado (0 si no hubo
+  /// ingresos o se gastó todo).
+  int get porcentajeAhorro => resultado.esPositivo ? resultado.porcentajeDe(ingresos) : 0;
 
   bool get vacio => cantidadIngresos == 0 && cantidadGastos == 0;
 }
