@@ -2,17 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../core/libro/consultas_libro.dart';
-import '../../../core/libro/libro_providers.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/utilidades/fechas.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import '../../../core/ui/widgets/mascota_otto.dart';
-import '../../categorias/logica/categorias_provider.dart';
-import '../logica/metas_provider.dart';
-import '../logica/servicio_resumen_mes.dart';
 import '../../configuracion/logica/ajustes_provider.dart';
-import '../../otto/logica/servicio_ia_contador.dart';
+import '../../otto/logica/contador_provider.dart';
+import '../logica/dashboard_provider.dart';
+import '../logica/servicio_resumen_mes.dart';
 
 /// Pantalla de resumen de un mes: ingresos, egresos por categoría y sobrante,
 /// con una devolución de la IA en rol de contador.
@@ -29,44 +26,10 @@ class PantallaResumenMes extends ConsumerStatefulWidget {
 }
 
 class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
-  ResumenMesData? _resumen;
-  String? _devolucionIa;
-  bool _cargandoIa = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _cargar();
-  }
-
-  Future<void> _cargar() async {
-    final cats = await ref.read(categoriasControladorProvider.future);
-    final db = await ref.read(baseDatosProvider.future);
-    final resumen = await ServicioResumenMes.calcular(ConsultasLibro(db), Periodo.de(widget.mes), cats);
-    if (!mounted) return;
-    setState(() => _resumen = resumen);
-
-    // Devolución de Otto contador (solo con la IA activa; se cachea por mes).
-    if (!(await ref.read(ajustesControladorProvider.future)).iaActiva) {
-      if (mounted) setState(() => _cargandoIa = false);
-      return;
-    }
-    final metas = await ref.read(metasControladorProvider.future);
-    final metasResumen = metas
-        .map((m) => '${m.nombre} ${m.porcentajeProgreso.toInt()}%')
-        .join(', ');
-    final texto = await ServicioIaContador.evaluar(resumen, metasResumen: metasResumen);
-    if (!mounted) return;
-    setState(() {
-      _devolucionIa = texto;
-      _cargandoIa = false;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     final mesTxt = capitalizarMes(DateFormat('MMMM yyyy', 'es').format(widget.mes));
-    final r = _resumen;
+    final r = ref.watch(resumenDeMesProvider(Periodo.de(widget.mes))).valueOrNull;
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
@@ -151,6 +114,8 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
   }
 
   Widget _tarjetaContador(BuildContext context) {
+    final devolucion = ref.watch(devolucionContadorProvider(Periodo.de(widget.mes)));
+    final iaActiva = ref.watch(ajustesControladorProvider).valueOrNull?.iaActiva ?? false;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -169,7 +134,7 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
             ],
           ),
           const SizedBox(height: 10),
-          if (_cargandoIa)
+          if (devolucion.isLoading)
             Row(
               children: [
                 const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: TemaApp.verde)),
@@ -179,7 +144,10 @@ class _PantallaResumenMesState extends ConsumerState<PantallaResumenMes> {
             )
           else
             Text(
-              _devolucionIa ?? 'No pude generar la devolución ahora. Revisá tu conexión e intentá de nuevo.',
+              devolucion.valueOrNull ??
+                  (iaActiva
+                      ? 'No pude generar la devolución ahora. Revisá tu conexión e intentá de nuevo.'
+                      : 'La IA está apagada. Se activa en Menú → Privacidad y seguridad.'),
               style: TextStyle(color: context.colores.textoSecundario, height: 1.4),
             ),
         ],

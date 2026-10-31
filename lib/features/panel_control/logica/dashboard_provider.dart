@@ -50,10 +50,14 @@ Future<List<TotalCategoria>> rankingGastos(Ref ref) async {
   return ranking;
 }
 
-/// Ingresos y egresos por categoría del mes seleccionado.
+/// Ingresos y egresos por categoría de un mes.
 @riverpod
-Future<ResumenMesData> resumenDelMes(Ref ref) async {
-  final mes = Periodo.de(ref.watch(mesSeleccionadoProvider));
+Future<ResumenMesData> resumenDeMes(Ref ref, Periodo mes) async {
   final categorias = await ref.watch(categoriasControladorProvider.future);
   return ServicioResumenMes.calcular(await consultasLibro(ref), mes, categorias);
 }
+
+/// El resumen del mes seleccionado.
+@riverpod
+Future<ResumenMesData> resumenDelMes(Ref ref) =>
+    ref.watch(resumenDeMesProvider(Periodo.de(ref.watch(mesSeleccionadoProvider))).future);
