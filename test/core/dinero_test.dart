@@ -1,5 +1,5 @@
-import 'package:finanzas/core/dinero/dinero.dart';
-import 'package:finanzas/core/dinero/formateador_monto.dart';
+import 'package:otto/core/dinero/dinero.dart';
+import 'package:otto/core/dinero/formateador_monto.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 

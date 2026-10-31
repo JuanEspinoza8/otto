@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:finanzas/core/base_de_datos/esquema.dart';
-import 'package:finanzas/core/base_de_datos/esquema_v8.dart';
-import 'package:finanzas/core/base_de_datos/gestor_base_datos.dart';
-import 'package:finanzas/core/base_de_datos/migracion_v9.dart';
-import 'package:finanzas/core/libro/consultas_libro.dart';
-import 'package:finanzas/features/configuracion/logica/servicio_respaldo.dart';
+import 'package:otto/core/base_de_datos/esquema.dart';
+import 'package:otto/core/base_de_datos/esquema_v8.dart';
+import 'package:otto/core/base_de_datos/gestor_base_datos.dart';
+import 'package:otto/core/base_de_datos/migracion_v9.dart';
+import 'package:otto/core/libro/consultas_libro.dart';
+import 'package:otto/features/configuracion/logica/servicio_respaldo.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';

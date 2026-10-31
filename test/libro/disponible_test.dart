@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:finanzas/core/base_de_datos/gestor_base_datos.dart';
-import 'package:finanzas/core/base_de_datos/migracion_v9.dart';
-import 'package:finanzas/core/dinero/dinero.dart';
-import 'package:finanzas/core/libro/libro_providers.dart';
-import 'package:finanzas/features/panel_control/logica/dolar_blue_provider.dart';
-import 'package:finanzas/features/panel_control/logica/metas_provider.dart';
+import 'package:otto/core/base_de_datos/gestor_base_datos.dart';
+import 'package:otto/core/base_de_datos/migracion_v9.dart';
+import 'package:otto/core/dinero/dinero.dart';
+import 'package:otto/core/libro/libro_providers.dart';
+import 'package:otto/features/panel_control/logica/dolar_blue_provider.dart';
+import 'package:otto/features/panel_control/logica/metas_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;

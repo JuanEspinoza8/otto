@@ -1,4 +1,4 @@
-import 'package:finanzas/core/base_de_datos/gestor_base_datos.dart';
+import 'package:otto/core/base_de_datos/gestor_base_datos.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'base_v8.dart';

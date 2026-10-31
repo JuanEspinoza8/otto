@@ -1,7 +1,7 @@
-import 'package:finanzas/core/dinero/dinero.dart';
-import 'package:finanzas/core/seguridad/autenticador.dart';
-import 'package:finanzas/core/seguridad/proteccion_app.dart';
-import 'package:finanzas/features/configuracion/logica/ajustes_provider.dart';
+import 'package:otto/core/dinero/dinero.dart';
+import 'package:otto/core/seguridad/autenticador.dart';
+import 'package:otto/core/seguridad/proteccion_app.dart';
+import 'package:otto/features/configuracion/logica/ajustes_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';

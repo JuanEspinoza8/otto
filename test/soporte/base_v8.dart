@@ -1,4 +1,4 @@
-import 'package:finanzas/core/base_de_datos/esquema_v8.dart';
+import 'package:otto/core/base_de_datos/esquema_v8.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Base de prueba con el esquema v8 (el que tiene hoy el cliente) y datos

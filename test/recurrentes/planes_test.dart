@@ -1,9 +1,9 @@
-import 'package:finanzas/core/dinero/dinero.dart';
-import 'package:finanzas/core/libro/consultas_libro.dart';
-import 'package:finanzas/core/libro/servicio_libro.dart';
-import 'package:finanzas/core/utilidades/fechas.dart';
-import 'package:finanzas/features/recurrentes/logica/servicio_planes.dart';
-import 'package:finanzas/features/recurrentes/modelo/plan.dart';
+import 'package:otto/core/dinero/dinero.dart';
+import 'package:otto/core/libro/consultas_libro.dart';
+import 'package:otto/core/libro/servicio_libro.dart';
+import 'package:otto/core/utilidades/fechas.dart';
+import 'package:otto/features/recurrentes/logica/servicio_planes.dart';
+import 'package:otto/features/recurrentes/modelo/plan.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 

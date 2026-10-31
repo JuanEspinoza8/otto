@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:finanzas/core/base_de_datos/esquema.dart';
-import 'package:finanzas/core/base_de_datos/gestor_base_datos.dart';
-import 'package:finanzas/core/base_de_datos/migracion_v9.dart';
-import 'package:finanzas/core/utilidades/fechas.dart';
+import 'package:otto/core/base_de_datos/esquema.dart';
+import 'package:otto/core/base_de_datos/gestor_base_datos.dart';
+import 'package:otto/core/base_de_datos/migracion_v9.dart';
+import 'package:otto/core/utilidades/fechas.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
