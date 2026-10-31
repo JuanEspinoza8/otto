@@ -3,12 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/consultas_libro.dart';
 import '../../../core/libro/libro_providers.dart';
 import '../../../core/libro/modelo/meta.dart';
 import '../../../core/libro/modelo/movimiento.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../../core/ui/acciones.dart';
+import '../../../core/utilidades/fechas.dart';
 import '../../categorias/logica/categorias_provider.dart';
+import '../../categorias/logica/presupuesto.dart';
 import '../../categorias/modelo/categoria.dart';
 import '../../categorias/vista/dialogo_nueva_categoria.dart';
 import '../../configuracion/logica/ajustes_provider.dart';
@@ -19,6 +22,7 @@ import '../../recurrentes/vista/dialogo_pagar_cuotas.dart';
 import '../logica/mes_seleccionado_provider.dart';
 import '../logica/movimientos_provider.dart';
 import 'formulario/campo_monto.dart';
+import 'formulario/concepto_y_fecha.dart';
 import 'formulario/mosaicos.dart';
 import 'formulario/selector_tipo.dart';
 
@@ -110,15 +114,28 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
             descripcion: _concepto.text,
           ),
     );
-    // Un gasto que supera el disponible se registra igual (ya ocurrió), pero se avisa.
-    if (ok && mounted) _terminar(gastoSinSaldo: esGasto && monto > disponible);
+    if (!ok || !mounted) return;
+    // Un gasto que supera el disponible se registra igual (ya ocurrió), pero
+    // se avisa; también si con este gasto la categoría cruzó su presupuesto.
+    final aviso = esGasto ? await _avisoPresupuesto(categoria, monto) : null;
+    if (mounted) _terminar(gastoSinSaldo: esGasto && monto > disponible, avisoPresupuesto: aviso);
   }
 
-  void _terminar({required bool gastoSinSaldo}) {
+  Future<String?> _avisoPresupuesto(Categoria categoria, Dinero monto) async {
+    if (!categoria.presupuestoLimite.esPositivo) return null;
+    final db = await ref.read(baseDatosProvider.future);
+    final gastos = await ConsultasLibro(db).totalesPorCategoria(Periodo.de(_fecha), TipoMovimiento.gasto);
+    final despues = gastos[categoria.id] ?? const Dinero.cero();
+    return avisoPresupuesto(categoria.nombre, despues - monto, despues, categoria.presupuestoLimite);
+  }
+
+  void _terminar({required bool gastoSinSaldo, String? avisoPresupuesto}) {
     final fecha = _fecha;
     _limpiar();
     final mesVisto = ref.read(mesSeleccionadoProvider);
-    if (gastoSinSaldo) {
+    if (avisoPresupuesto != null) {
+      _avisar('Gasto registrado. $avisoPresupuesto.', avisoPresupuesto.startsWith('Te pasaste') ? TemaApp.rojo : TemaApp.amarillo);
+    } else if (gastoSinSaldo) {
       _avisar('Gasto registrado. Ojo: quedás con saldo negativo.', TemaApp.rojo);
     } else if (fecha.year != mesVisto.year || fecha.month != mesVisto.month) {
       _avisar('Guardado en ${DateFormat('MMMM', 'es').format(fecha)}. Cambiá de mes para verlo.', TemaApp.azul);
@@ -136,16 +153,6 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
     });
   }
 
-  Future<void> _elegirFecha() async {
-    final elegida = await showDatePicker(
-      context: context,
-      initialDate: _fecha,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-    );
-    if (elegida != null) setState(() => _fecha = elegida);
-  }
-
   /// Crea una categoría del tipo actual y la deja elegida.
   Future<void> _crearCategoria() async {
     final id = await DialogoNuevaCategoria.mostrar(context, _tipo == TipoFormulario.ingreso ? 'ingreso' : 'gasto');
@@ -161,6 +168,8 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
         .where((c) => c.tipo == (_tipo == TipoFormulario.ingreso ? 'ingreso' : 'gasto'))
         .toList();
     final valorHora = ref.watch(ajustesControladorProvider).valueOrNull?.valorHoraExtra ?? const Dinero.cero();
+    // Mantiene cargado el disponible para el aviso de saldo negativo.
+    ref.watch(disponibleProvider);
     final etiqueta = TextStyle(fontSize: 12, color: context.colores.textoSecundario, fontWeight: FontWeight.bold, letterSpacing: 1.1);
 
     return Column(
@@ -201,34 +210,7 @@ class _FormularioMovimientoState extends ConsumerState<FormularioMovimiento> {
         const SizedBox(height: 24),
         // El aporte a una meta va con la fecha de hoy y un concepto automático.
         if (_tipo != TipoFormulario.ahorro) ...[
-          Text('CONCEPTO', style: etiqueta),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _concepto,
-            style: TextStyle(color: context.colores.textoPrimario),
-            decoration: InputDecoration(
-              hintText: 'Ej: almuerzo en el trabajo',
-              hintStyle: TextStyle(color: context.colores.textoSecundario, fontSize: 14),
-              filled: true,
-              fillColor: context.colores.superficie,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Text('FECHA', style: etiqueta),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _elegirFecha,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              decoration: BoxDecoration(color: context.colores.superficie, borderRadius: BorderRadius.circular(12)),
-              child: Text(
-                DateFormat("dd 'de' MMMM, yyyy", 'es').format(_fecha),
-                style: TextStyle(fontSize: 14, color: context.colores.textoPrimario),
-              ),
-            ),
-          ),
+          ConceptoYFecha(concepto: _concepto, fecha: _fecha, alCambiarFecha: (f) => setState(() => _fecha = f)),
           const SizedBox(height: 32),
         ] else
           const SizedBox(height: 8),
