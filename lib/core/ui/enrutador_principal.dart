@@ -14,13 +14,12 @@ class EnrutadorPrincipal extends StatefulWidget {
 }
 
 class _EnrutadorPrincipalState extends State<EnrutadorPrincipal> {
-  int _indiceActual = 0; // 0 porque ahora arranca en "Inicio" (Dashboard)
+  int _indiceActual = 0; // arranca en Inicio
   late final PageController _controladorPagina;
 
   @override
   void initState() {
     super.initState();
-    // Iniciamos la pagina en el indice 1 (Registrar)
     _controladorPagina = PageController(initialPage: _indiceActual);
   }
 

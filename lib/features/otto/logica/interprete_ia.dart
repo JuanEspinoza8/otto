@@ -31,8 +31,12 @@ Reglas:
 - Si no identificás un monto para un ítem, no lo incluyas.''';
 
     final contenido = await ClienteIa.completar(sistema: _sistema, usuario: usuario, temperatura: 0.2, json: true);
-    final objeto = _extraerJson(contenido);
-    final movimientos = objeto?['movimientos'];
+    return leerRespuesta(contenido, categorias);
+  }
+
+  /// Convierte la respuesta de la IA en sugerencias (descarta lo inválido).
+  static List<SugerenciaOtto> leerRespuesta(String? contenido, List<Categoria> categorias) {
+    final movimientos = _extraerJson(contenido)?['movimientos'];
     if (movimientos is! List) return const [];
     return movimientos.map((m) => _parsear(m, categorias)).whereType<SugerenciaOtto>().toList();
   }
