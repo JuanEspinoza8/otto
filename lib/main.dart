@@ -4,20 +4,18 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/base_de_datos/gestor_base_datos.dart';
-import 'core/tema/tema_app.dart';
-import 'core/ui/pantalla_error_base.dart';
+import 'core/preferencias.dart';
 import 'core/seguridad/proteccion_app.dart';
+import 'core/tema/tema_app.dart';
 import 'core/ui/enrutador_principal.dart';
-import 'features/configuracion/logica/servicio_notificaciones.dart';
+import 'core/ui/pantalla_error_base.dart';
 import 'features/configuracion/logica/onboarding_provider.dart';
+import 'features/configuracion/logica/servicio_notificaciones.dart';
 import 'features/configuracion/logica/tema_provider.dart';
 import 'features/configuracion/vista/pantalla_onboarding.dart';
 
-void main() async {
-  // Aseguramos que los bindings de Flutter estén inicializados antes de ejecutar asincronismo
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Inicializamos el formateo de fechas para la región de Argentina (o genérico en español)
   await initializeDateFormatting('es_AR', null);
 
   // La base se abre (y si hace falta se migra) antes de mostrar la app: si la
@@ -29,73 +27,39 @@ void main() async {
     return;
   }
 
-  // Inicializar notificaciones locales
+  final prefs = await SharedPreferences.getInstance();
   await ServicioNotificaciones.inicializar();
-
-  // Reprogramar los recordatorios diarios si están activos y hay permiso.
   try {
-    final prefs = await SharedPreferences.getInstance();
+    // Reprogramar los recordatorios diarios si están activos y hay permiso.
     if ((prefs.getBool('recordatorioDiario') ?? false) && await ServicioNotificaciones.permisoConcedido()) {
       await ServicioNotificaciones.reprogramarNotificaciones(prefs.getStringList('horariosRecordatorios') ?? ['20:00']);
     }
-  } catch (_) {/* no bloquear el arranque por notificaciones */}
+  } catch (_) {/* las notificaciones no frenan el arranque */}
 
   runApp(
-    const ProviderScope(
-      child: AplicacionFinanzas(),
+    ProviderScope(
+      overrides: [preferenciasProvider.overrideWithValue(prefs)],
+      child: const AppOtto(),
     ),
   );
 }
 
-class AplicacionFinanzas extends ConsumerWidget {
-  const AplicacionFinanzas({super.key});
+class AppOtto extends ConsumerWidget {
+  const AppOtto({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final modoTema = ref.watch(temaControladorProvider);
-
     return MaterialApp(
       title: 'Otto',
       debugShowCheckedModeBanner: false,
       theme: TemaApp.obtenerTemaClaro(),
       darkTheme: TemaApp.obtenerTemaOscuro(),
-      themeMode: modoTema,
+      themeMode: ref.watch(temaControladorProvider),
       // Por encima del Navigator: el bloqueo tapa también rutas y diálogos.
       builder: (context, child) => ProteccionApp(child: child!),
-      home: const _SelectorInicial(),
-    );
-  }
-}
-
-/// Widget que decide si mostrar el onboarding o la app principal
-/// basándose en si el usuario ya completó la configuración inicial.
-class _SelectorInicial extends ConsumerWidget {
-  const _SelectorInicial();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final onboardingAsync = ref.watch(onboardingControladorProvider);
-
-    return onboardingAsync.when(
-      loading: () => Scaffold(
-        backgroundColor: context.colores.fondo,
-        body: const Center(child: CircularProgressIndicator(color: TemaApp.verde)),
-      ),
-      error: (e, _) => Scaffold(
-        body: Center(child: Text('Error: $e')),
-      ),
-      data: (completado) {
-        if (completado) {
-          return const EnrutadorPrincipal();
-        }
-
-        return PantallaOnboarding(
-          alFinalizar: () {
-            // Forzar rebuild — el provider ya se actualizó internamente
-            ref.invalidate(onboardingControladorProvider);
-          },
-        );
-      },
+      home: ref.watch(onboardingControladorProvider)
+          ? const EnrutadorPrincipal()
+          : const PantallaOnboarding(),
     );
   }
 }

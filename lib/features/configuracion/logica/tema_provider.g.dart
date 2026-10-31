@@ -6,11 +6,9 @@ part of 'tema_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$temaControladorHash() => r'5545574a8392f065d597ce42fa1c909803f82ea2';
+String _$temaControladorHash() => r'c5d4c7922605f11e2fe6ca64cf1b87a32633bce6';
 
-/// Controlador del modo de tema (claro/oscuro) persistido en disco.
-///
-/// Por defecto la app arranca en modo oscuro (diseño de referencia).
+/// Modo claro u oscuro, guardado en las preferencias (oscuro por defecto).
 ///
 /// Copied from [TemaControlador].
 @ProviderFor(TemaControlador)

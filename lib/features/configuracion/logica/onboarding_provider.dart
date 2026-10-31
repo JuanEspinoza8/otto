@@ -1,8 +1,8 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/dinero/dinero.dart';
 import '../../../core/libro/libro_providers.dart';
+import '../../../core/preferencias.dart';
 import '../../recurrentes/logica/servicio_planes.dart';
 import '../repositorio/ajustes_repositorio.dart';
 
@@ -14,7 +14,7 @@ class OnboardingControlador extends _$OnboardingControlador {
   static const _kCompleto = 'onboardingCompleto';
 
   @override
-  Future<bool> build() async => (await SharedPreferences.getInstance()).getBool(_kCompleto) ?? false;
+  bool build() => ref.watch(preferenciasProvider).getBool(_kCompleto) ?? false;
 
   /// Guarda el nombre, crea el plan del sueldo y el valor de la hora extra.
   Future<void> completarOnboarding({
@@ -26,9 +26,9 @@ class OnboardingControlador extends _$OnboardingControlador {
       await ServicioPlanes(txn).fijarSueldo(salarioMensual, hoy: DateTime.now());
       if (valorHoraExtra.esPositivo) await AjustesRepositorio(txn).fijarValorHoraExtra(valorHoraExtra);
     });
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = ref.read(preferenciasProvider);
     await prefs.setString('nombreUsuario', nombre);
     await prefs.setBool(_kCompleto, true);
-    state = const AsyncData(true);
+    state = true;
   }
 }

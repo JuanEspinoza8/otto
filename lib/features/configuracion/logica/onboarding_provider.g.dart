@@ -7,14 +7,14 @@ part of 'onboarding_provider.dart';
 // **************************************************************************
 
 String _$onboardingControladorHash() =>
-    r'68ee4419acf299500e998e6a244a6205f2bbf537';
+    r'060ddf5b361387df1f6af6d10d6ba5259e88bae1';
 
 /// Si el usuario ya completó la configuración inicial.
 ///
 /// Copied from [OnboardingControlador].
 @ProviderFor(OnboardingControlador)
 final onboardingControladorProvider =
-    AsyncNotifierProvider<OnboardingControlador, bool>.internal(
+    NotifierProvider<OnboardingControlador, bool>.internal(
   OnboardingControlador.new,
   name: r'onboardingControladorProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -24,6 +24,6 @@ final onboardingControladorProvider =
   allTransitiveDependencies: null,
 );
 
-typedef _$OnboardingControlador = AsyncNotifier<bool>;
+typedef _$OnboardingControlador = Notifier<bool>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
