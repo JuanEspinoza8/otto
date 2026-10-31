@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../panel_control/logica/dolar_blue_provider.dart';
+import '../../../core/ui/acciones.dart';
 import '../../panel_control/logica/metas_provider.dart';
 import '../logica/saldo_mes_anterior_provider.dart';
 import '../../../core/dinero/dinero.dart';
@@ -13,8 +13,8 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final sobra = ref.watch(saldoMesAnteriorProvider).valueOrNull ?? 0;
-    if (sobra <= 0) return const SizedBox.shrink();
+    final sobra = ref.watch(saldoMesAnteriorProvider).valueOrNull ?? const Dinero.cero();
+    if (!sobra.esPositivo) return const SizedBox.shrink();
 
     final notifier = ref.read(saldoMesAnteriorProvider.notifier);
 
@@ -34,13 +34,13 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
               const Text('💸', style: TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Te sobraron ${Dinero.desdeUnidades(sobra).formatear()} del mes pasado',
+                child: Text('Te sobraron ${sobra.formatear()} del mes pasado',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: context.colores.textoPrimario)),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text('¿Qué querés hacer con ese dinero?', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
+          Text('¿Lo guardás en una meta? Si no, queda en tu disponible.', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -53,7 +53,7 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
               ),
               TextButton(
                 onPressed: () => notifier.descartar(),
-                child: Text('Descartar', style: TextStyle(color: context.colores.textoSecundario)),
+                child: Text('Dejarlo disponible', style: TextStyle(color: context.colores.textoSecundario)),
               ),
             ],
           ),
@@ -62,9 +62,8 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
     );
   }
 
-  void _elegirMeta(BuildContext context, WidgetRef ref, double sobra) {
-    final metas = (ref.read(metasControladorProvider).valueOrNull ?? {}).keys.toList();
-    final blue = ref.read(dolarBlueProvider).valueOrNull?['venta'] ?? 0.0;
+  void _elegirMeta(BuildContext context, WidgetRef ref, Dinero sobra) {
+    final metas = ref.read(metasControladorProvider).valueOrNull ?? const [];
     if (metas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No tenés metas creadas todavía')),
@@ -87,7 +86,13 @@ class WidgetSaldoMesAnterior extends ConsumerWidget {
                   trailing: Text(m.esUsd ? 'USD' : 'ARS', style: TextStyle(color: ctx.colores.textoSecundario, fontSize: 12)),
                   onTap: () {
                     Navigator.pop(ctx);
-                    ref.read(saldoMesAnteriorProvider.notifier).aportarAMeta(m, sobra, blue);
+                    // El aporte se valida contra el objetivo de la meta: si no
+                    // entra todo, se avisa y el sobrante sigue disponible.
+                    ejecutarConAviso(
+                      context,
+                      () => ref.read(saldoMesAnteriorProvider.notifier).aportarAMeta(m, sobra.min(m.esUsd ? sobra : m.falta)),
+                      exito: 'Guardado en "${m.nombre}"',
+                    );
                   },
                 )),
           ],

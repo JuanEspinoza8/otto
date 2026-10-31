@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/tema/tema_app.dart';
-import '../../panel_control/logica/ahorro_disponible_provider.dart';
-import '../logica/cuotas_provider.dart';
-import '../modelo/cuota.dart';
-import 'dialogo_cuota.dart';
 import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
+import '../logica/planes_provider.dart';
+import '../modelo/plan.dart';
+import 'dialogo_cuota.dart';
 
 /// Pantalla de gestión de cuotas en pago.
 class PantallaCuotas extends ConsumerWidget {
@@ -14,7 +15,8 @@ class PantallaCuotas extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cuotasAsync = ref.watch(cuotasControladorProvider);
+    final planesAsync = ref.watch(planesControladorProvider);
+    final cuotas = ref.watch(cuotasProvider);
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
@@ -29,10 +31,10 @@ class PantallaCuotas extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Nueva cuota'),
       ),
-      body: cuotasAsync.when(
+      body: planesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: TemaApp.rojo))),
-        data: (cuotas) {
+        error: (e, _) => Center(child: Text('No se pudieron leer las cuotas', style: TextStyle(color: context.colores.textoSecundario))),
+        data: (_) {
           if (cuotas.isEmpty) {
             return _VacioCuotas(colores: context.colores);
           }
@@ -40,7 +42,7 @@ class PantallaCuotas extends ConsumerWidget {
             padding: const EdgeInsets.all(16),
             children: [
               _TarjetaAhorroVsCuotas(cuotas: cuotas),
-              ...cuotas.map((c) => _TarjetaCuota(cuota: c)),
+              ...cuotas.map((c) => _TarjetaCuota(key: ValueKey(c.id), cuota: c)),
               const SizedBox(height: 80),
             ],
           );
@@ -52,15 +54,15 @@ class PantallaCuotas extends ConsumerWidget {
 
 /// Muestra si los ahorros disponibles alcanzan para cancelar cuotas.
 class _TarjetaAhorroVsCuotas extends ConsumerWidget {
-  final List<Cuota> cuotas;
+  final List<Plan> cuotas;
   const _TarjetaAhorroVsCuotas({required this.cuotas});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final activas = cuotas.where((c) => c.activo && !c.finalizada).toList();
+    final activas = cuotas.where((c) => c.activo && !c.terminado).toList();
     if (activas.isEmpty) return const SizedBox.shrink();
 
-    final disponible = ref.watch(ahorroDisponibleProvider);
+    final disponible = ref.watch(disponibleProvider).valueOrNull ?? const Dinero.cero();
     final cancelables = activas.where((c) => c.montoRestante <= disponible).toList()
       ..sort((a, b) => a.montoRestante.compareTo(b.montoRestante));
 
@@ -70,7 +72,7 @@ class _TarjetaAhorroVsCuotas extends ConsumerWidget {
     } else {
       final masBarata = activas.reduce((a, b) => a.montoRestante <= b.montoRestante ? a : b);
       final falta = masBarata.montoRestante - disponible;
-      mensaje = 'Todavía no te alcanza para cancelar una cuota entera. La más cercana es "${masBarata.nombre}" (te faltan ${Dinero.desdeUnidades(falta).formatear()}).';
+      mensaje = 'Todavía no te alcanza para cancelar una cuota entera. La más cercana es "${masBarata.nombre}" (te faltan ${falta.formatear()}).';
     }
 
     return Container(
@@ -88,7 +90,7 @@ class _TarjetaAhorroVsCuotas extends ConsumerWidget {
             children: [
               const Icon(Icons.lightbulb_outline, size: 18, color: TemaApp.azul),
               const SizedBox(width: 8),
-              Text('Ahorros disponibles: ${Dinero.desdeUnidades(disponible).formatear()}',
+              Text('Disponible: ${disponible.formatear()}',
                   style: const TextStyle(color: TemaApp.azul, fontWeight: FontWeight.bold, fontSize: 13)),
             ],
           ),
@@ -101,8 +103,8 @@ class _TarjetaAhorroVsCuotas extends ConsumerWidget {
 }
 
 class _TarjetaCuota extends ConsumerWidget {
-  final Cuota cuota;
-  const _TarjetaCuota({required this.cuota});
+  final Plan cuota;
+  const _TarjetaCuota({super.key, required this.cuota});
 
   Future<void> _confirmarEliminar(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
@@ -116,12 +118,14 @@ class _TarjetaCuota extends ConsumerWidget {
         ],
       ),
     );
-    if (ok == true) ref.read(cuotasControladorProvider.notifier).eliminar(cuota.id!);
+    if (ok == true && context.mounted) {
+      await ejecutarConAviso(context, () => ref.read(planesControladorProvider.notifier).eliminar(cuota));
+    }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final finalizada = cuota.finalizada;
+    final finalizada = cuota.terminado;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -162,14 +166,14 @@ class _TarjetaCuota extends ConsumerWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            '${Dinero.desdeUnidades(cuota.montoCuota).formatear()} · cuota ${cuota.cuotasPagadas}/${cuota.totalCuotas} · día ${cuota.diaDebito}',
+            '${cuota.monto.formatear()} · cuota ${cuota.cuotasPagadas}/${cuota.totalCuotas} · día ${cuota.diaDebito}',
             style: TextStyle(color: context.colores.textoSecundario, fontSize: 12),
           ),
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: LinearProgressIndicator(
-              value: cuota.porcentaje / 100,
+              value: cuota.porcentajePagado / 100,
               minHeight: 6,
               backgroundColor: context.colores.superficieAlta,
               valueColor: AlwaysStoppedAnimation<Color>(finalizada ? TemaApp.verde : TemaApp.azul),
@@ -179,7 +183,7 @@ class _TarjetaCuota extends ConsumerWidget {
           Text(
             finalizada
                 ? 'Terminada · ya no se descuenta'
-                : 'Restan ${cuota.cuotasRestantes} cuotas · ${Dinero.desdeUnidades(cuota.montoRestante).formatear()}',
+                : 'Restan ${cuota.cuotasRestantes} cuotas · ${cuota.montoRestante.formatear()}',
             style: TextStyle(color: context.colores.textoSecundario, fontSize: 11),
           ),
         ],

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
 import '../logica/horas_extras_provider.dart';
 import '../../../core/dinero/dinero.dart';
 
@@ -12,7 +13,7 @@ class WidgetPreguntaHorasExtras extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mostrar = ref.watch(horasExtrasMesProvider).valueOrNull ?? false;
+    final mostrar = ref.watch(horasExtrasMesProvider).valueOrNull?.preguntar ?? false;
     if (!mostrar) return const SizedBox.shrink();
 
     final notifier = ref.read(horasExtrasMesProvider.notifier);
@@ -80,9 +81,9 @@ class _DialogoHorasExtrasState extends ConsumerState<_DialogoHorasExtras> {
 
   @override
   Widget build(BuildContext context) {
-    final valor = ref.read(horasExtrasMesProvider.notifier).valorHora;
+    final valor = ref.watch(horasExtrasMesProvider).valueOrNull?.valorHora ?? const Dinero.cero();
     final horas = (parsearCentesimos(_horas.text) ?? 0) / 100;
-    final total = horas * valor;
+    final total = valor.por(horas);
 
     return AlertDialog(
       title: Text('Horas extras', style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.bold)),
@@ -100,7 +101,7 @@ class _DialogoHorasExtrasState extends ConsumerState<_DialogoHorasExtras> {
           ),
           const SizedBox(height: 12),
           Text(
-            'A ${Dinero.desdeUnidades(valor).formatear()}/h = ${Dinero.desdeUnidades(total).formatear()}',
+            'A ${valor.formatear()}/h = ${total.formatear()}',
             style: const TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold),
           ),
         ],
@@ -116,8 +117,12 @@ class _DialogoHorasExtrasState extends ConsumerState<_DialogoHorasExtras> {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ingresá las horas')));
               return;
             }
-            await ref.read(horasExtrasMesProvider.notifier).registrarHoras(horas);
-            if (context.mounted) Navigator.pop(context);
+            final ok = await ejecutarConAviso(
+              context,
+              () => ref.read(horasExtrasMesProvider.notifier).registrarHoras(horas),
+              exito: 'Horas extra cargadas',
+            );
+            if (ok && context.mounted) Navigator.pop(context);
           },
           style: ElevatedButton.styleFrom(backgroundColor: TemaApp.verde, foregroundColor: Colors.white),
           child: const Text('Cargar'),

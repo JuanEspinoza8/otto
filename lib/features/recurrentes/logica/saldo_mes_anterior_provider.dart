@@ -1,52 +1,48 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../movimientos/repositorio/movimiento_repositorio.dart';
-import '../../panel_control/logica/metas_provider.dart';
-import '../../panel_control/modelo/meta.dart';
-import '../repositorio/recurrencia_repositorio.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/consultas_libro.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../../../core/libro/modelo/meta.dart';
+import '../../../core/libro/servicio_libro.dart';
+import '../../../core/utilidades/fechas.dart';
+import '../../panel_control/logica/dolar_blue_provider.dart';
+import '../repositorio/avisos_repositorio.dart';
 
 part 'saldo_mes_anterior_provider.g.dart';
 
-/// Maneja el "sobrante" del mes anterior: si quedó plata, se ofrece trasladarla
-/// al mes actual o aportarla a una meta. Devuelve el monto sobrante (0 si no
-/// hay o si ya se resolvió este mes).
+/// El "sobrante" del mes anterior: lo que quedó libre ese mes, ofrecido para
+/// guardarlo en una meta. Nunca se ofrece más que el disponible de hoy.
 @riverpod
 class SaldoMesAnterior extends _$SaldoMesAnterior {
-  final MovimientoRepositorio _movRepo = MovimientoRepositorio();
-  final RecurrenciaRepositorio _recurRepo = RecurrenciaRepositorio();
-
   @override
-  FutureOr<double> build() async {
-    final periodo = _periodo();
-    final resuelto = await _recurRepo.obtenerMovimientoId(tipo: 'saldoanterior', referenciaId: 0, periodo: periodo);
-    // Si ya se registró (aunque sea con movimiento null = descartado), no mostrar.
-    final aplicadas = await _recurRepo.obtenerAplicadas(periodo);
-    if (resuelto != null || aplicadas.contains('saldoanterior:0')) return 0;
-
-    final ahora = DateTime.now();
-    final mesAnterior = DateTime(ahora.year, ahora.month - 1, 1);
-    final tot = await _movRepo.obtenerTotalesMes(mesAnterior);
-    // El sobrante es la plata libre que quedó: ingresos − gastos − lo que ya se
-    // guardó en metas ese mes.
-    final sobra = (tot['ingresos'] ?? 0) - (tot['gastos'] ?? 0) - (tot['ahorros'] ?? 0);
-    return sobra > 0 ? sobra : 0;
+  Future<Dinero> build() async {
+    final consultas = await consultasLibro(ref);
+    final db = await ref.watch(baseDatosProvider.future);
+    final actual = Periodo.de(DateTime.now());
+    if (await AvisosRepositorio(db).resuelto(AvisosRepositorio.saldoAnterior, actual)) {
+      return const Dinero.cero();
+    }
+    final sobrante = (await consultas.sobranteDelMes(actual.anterior)).min(await consultas.disponible());
+    return sobrante.esPositivo ? sobrante : const Dinero.cero();
   }
 
-  /// Aporta el sobrante a una meta (convierte a USD si la meta es en dólares).
-  Future<void> aportarAMeta(Meta meta, double montoPesos, double blue) async {
-    await ref.read(metasControladorProvider.notifier).aportar(meta, montoPesos, blue: blue);
-    await _recurRepo.registrar(tipo: 'saldoanterior', referenciaId: 0, periodo: _periodo());
-    ref.invalidateSelf();
+  /// Aporta [pesos] a la meta con fecha del último día del mes anterior (así
+  /// cuenta en ese mes y no vuelve a restarse en este) y cierra el aviso, todo
+  /// en la misma transacción: si el aporte falla, el aviso sigue abierto.
+  Future<void> aportarAMeta(Meta meta, Dinero pesos) {
+    final actual = Periodo.de(DateTime.now());
+    final ultimoDiaAnterior = actual.primerDia.subtract(const Duration(days: 1));
+    final cotizacion = ref.read(dolarBlueProvider).valueOrNull?.venta;
+    return escribirEnTransaccion(ref, (txn) async {
+      final sobrante = await ConsultasLibro(txn).sobranteDelMes(actual.anterior);
+      if (pesos > sobrante) throw ErrorLibro('El sobrante es ${sobrante.formatear()}');
+      await ServicioLibro(txn).aportarAMeta(meta.id, pesos, cotizacion: cotizacion, fecha: ultimoDiaAnterior);
+      await AvisosRepositorio(txn).marcar(AvisosRepositorio.saldoAnterior, actual);
+    });
   }
 
-  /// El usuario decide no hacer nada con el sobrante este mes.
-  Future<void> descartar() async {
-    await _recurRepo.registrar(tipo: 'saldoanterior', referenciaId: 0, periodo: _periodo());
-    ref.invalidateSelf();
-  }
-
-  String _periodo() {
-    final n = DateTime.now();
-    return '${n.year}-${n.month.toString().padLeft(2, '0')}';
-  }
+  /// El usuario decide dejar el sobrante en el disponible.
+  Future<void> descartar() => escribirEnTransaccion(
+      ref, (txn) => AvisosRepositorio(txn).marcar(AvisosRepositorio.saldoAnterior, Periodo.de(DateTime.now())));
 }

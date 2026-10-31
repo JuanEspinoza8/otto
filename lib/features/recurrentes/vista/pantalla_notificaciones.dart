@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
-import '../../panel_control/logica/ahorro_disponible_provider.dart';
-import '../logica/cuotas_provider.dart';
-import '../logica/gastos_fijos_provider.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../logica/planes_provider.dart';
 import 'dialogo_pagar_cuotas.dart';
 import '../../../core/dinero/dinero.dart';
 
@@ -24,13 +23,9 @@ class PantallaNotificaciones extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final disponible = ref.watch(ahorroDisponibleProvider);
-    final cuotas = (ref.watch(cuotasControladorProvider).valueOrNull ?? [])
-        .where((c) => c.activo && !c.finalizada)
-        .toList();
-    final fijos = (ref.watch(gastosFijosControladorProvider).valueOrNull ?? [])
-        .where((f) => f.activo)
-        .toList();
+    final disponible = ref.watch(disponibleProvider).valueOrNull ?? const Dinero.cero();
+    final cuotas = ref.watch(cuotasProvider).where((c) => c.activo && !c.terminado).toList();
+    final fijos = ref.watch(fijosProvider).where((f) => f.activo).toList();
 
     final avisos = <_Aviso>[];
 
@@ -40,8 +35,8 @@ class PantallaNotificaciones extends ConsumerWidget {
         ..sort((a, b) => a.montoRestante.compareTo(b.montoRestante));
 
       // Cuántas cuotas mensuales sueltas podés cubrir (de la más barata a la más cara).
-      final mensuales = cuotas.map((c) => c.montoCuota).toList()..sort();
-      double acum = 0;
+      final mensuales = cuotas.map((c) => c.montoDeCuota(c.cuotasPagadas + 1)).toList()..sort();
+      var acum = const Dinero.cero();
       int cuotasCubiertas = 0;
       for (final m in mensuales) {
         if (acum + m <= disponible) {
@@ -52,7 +47,7 @@ class PantallaNotificaciones extends ConsumerWidget {
 
       if (cancelables.isNotEmpty) {
         avisos.add(_Aviso(Icons.savings, TemaApp.verde, 'Podés cancelar deudas',
-            'Con tus ahorros (${Dinero.desdeUnidades(disponible).formatear()}) podés cancelar por completo ${cancelables.length} de ${cuotas.length}: ${cancelables.map((c) => c.nombre).join(', ')}. Tocá para pagar.',
+            'Con tu disponible (${disponible.formatear()}) podés cancelar por completo ${cancelables.length} de ${cuotas.length}: ${cancelables.map((c) => c.nombre).join(', ')}. Tocá para pagar.',
             onTap: () => DialogoPagarCuotas.mostrar(context)));
       }
       if (cuotasCubiertas > 0) {
@@ -60,20 +55,20 @@ class PantallaNotificaciones extends ConsumerWidget {
             'Te alcanza para pagar $cuotasCubiertas ${cuotasCubiertas == 1 ? 'cuota mensual' : 'cuotas mensuales'} de las que tenés en curso. Tocá para pagar.',
             onTap: () => DialogoPagarCuotas.mostrar(context)));
       } else {
-        final masBarata = cuotas.reduce((a, b) => a.montoCuota <= b.montoCuota ? a : b);
+        final masBarata = cuotas.reduce((a, b) => a.monto <= b.monto ? a : b);
         avisos.add(_Aviso(Icons.info_outline, context.colores.textoSecundario, 'Cuotas',
-            'Todavía no te alcanza para pagar una cuota. La más barata es "${masBarata.nombre}" (${Dinero.desdeUnidades(masBarata.montoCuota).formatear()}).'));
+            'Todavía no te alcanza para pagar una cuota. La más barata es "${masBarata.nombre}" (${masBarata.montoDeCuota(masBarata.cuotasPagadas + 1).formatear()}).'));
       }
     }
 
     // Aviso de fijos que se debitan este mes.
     if (fijos.isNotEmpty) {
-      final total = fijos.fold<double>(0, (s, f) => s + f.monto);
+      final total = fijos.fold(const Dinero.cero(), (s, f) => s + f.monto);
       final proximos = (fijos.toList()..sort((a, b) => a.diaDebito.compareTo(b.diaDebito)))
           .map((f) => '${f.nombre} (día ${f.diaDebito})')
           .join(', ');
       avisos.add(_Aviso(Icons.event_repeat, TemaApp.rojo, 'Gastos fijos del mes',
-          'Este mes se debitan ${Dinero.desdeUnidades(total).formatear()} en fijos: $proximos. Confirmalos en "Pendientes del mes".'));
+          'Este mes se debitan ${total.formatear()} en fijos: $proximos. Confirmalos en "Pendientes del mes".'));
     }
 
     return Scaffold(

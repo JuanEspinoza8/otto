@@ -4,17 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
 import '../../categorias/logica/categorias_provider.dart';
-import '../logica/cuotas_provider.dart';
-import '../modelo/cuota.dart';
+import '../logica/planes_provider.dart';
+import '../modelo/plan.dart';
+import '../../../core/ui/acciones.dart';
+import '../../../core/utilidades/fechas.dart';
 import '../../../core/dinero/dinero.dart';
 import '../../../core/dinero/formateador_monto.dart';
 
 /// Diálogo para crear o editar una cuota en pago.
 class DialogoCuota extends ConsumerStatefulWidget {
-  final Cuota? aEditar;
+  final Plan? aEditar;
   const DialogoCuota({super.key, this.aEditar});
 
-  static Future<void> mostrar(BuildContext context, {Cuota? aEditar}) {
+  static Future<void> mostrar(BuildContext context, {Plan? aEditar}) {
     return showDialog(
       context: context,
       builder: (_) => DialogoCuota(aEditar: aEditar),
@@ -32,13 +34,14 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
   late final TextEditingController _pagadas;
   int? _categoriaId;
   int _diaDebito = 1;
+  bool _guardando = false;
 
   @override
   void initState() {
     super.initState();
     final c = widget.aEditar;
     _nombre = TextEditingController(text: c?.nombre ?? '');
-    _monto = TextEditingController(text: Dinero.desdeUnidades(c?.montoCuota ?? 0).textoEditable);
+    _monto = TextEditingController(text: c?.monto.textoEditable ?? '');
     _total = TextEditingController(text: c != null ? c.totalCuotas.toString() : '');
     _pagadas = TextEditingController(text: c != null ? c.cuotasPagadas.toString() : '0');
     _categoriaId = c?.categoriaId;
@@ -56,41 +59,38 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
 
   Future<void> _guardar() async {
     final nombre = _nombre.text.trim();
-    final monto = (Dinero.parsear(_monto.text)?.unidades ?? 0);
+    final monto = Dinero.parsear(_monto.text);
     final total = int.tryParse(_total.text) ?? 0;
     final pagadas = int.tryParse(_pagadas.text) ?? 0;
 
-    if (nombre.isEmpty || monto <= 0 || total <= 0) {
+    if (nombre.isEmpty || monto == null || !monto.esPositivo || total <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Completá nombre, monto y total de cuotas')),
       );
       return;
     }
 
-    final controlador = ref.read(cuotasControladorProvider.notifier);
-    final pagadasValidas = pagadas.clamp(0, total);
-    if (widget.aEditar == null) {
-      await controlador.agregar(Cuota(
-        nombre: nombre,
-        montoCuota: monto,
-        categoriaId: _categoriaId,
-        totalCuotas: total,
-        cuotasPagadas: pagadasValidas,
-        diaDebito: _diaDebito,
-        activo: pagadasValidas < total,
-      ));
-    } else {
-      await controlador.actualizar(widget.aEditar!.copiaCon(
-        nombre: nombre,
-        montoCuota: monto,
-        categoriaId: _categoriaId,
-        totalCuotas: total,
-        cuotasPagadas: pagadasValidas,
-        diaDebito: _diaDebito,
-        activo: pagadasValidas < total,
-      ));
-    }
-    if (mounted) Navigator.pop(context);
+    final previo = widget.aEditar;
+    final plan = Plan(
+      id: previo?.id,
+      tipo: TipoPlan.cuotas,
+      nombre: nombre,
+      categoriaId: _categoriaId,
+      monto: monto,
+      total: monto.por(total),
+      totalCuotas: total,
+      primerPeriodo: previo?.primerPeriodo ?? Periodo.de(DateTime.now()),
+      diaDebito: _diaDebito,
+      activo: previo?.activo ?? true,
+    );
+    final controlador = ref.read(planesControladorProvider.notifier);
+    setState(() => _guardando = true);
+    final ok = await ejecutarConAviso(
+      context,
+      () => previo == null ? controlador.crearCuotas(plan, yaPagadas: pagadas) : controlador.actualizar(plan),
+    );
+    if (!mounted) return;
+    ok ? Navigator.pop(context) : setState(() => _guardando = false);
   }
 
   @override
@@ -135,8 +135,11 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
+                  // Al editar, las pagadas salen de los meses confirmados: se
+                  // cambian pagando cuotas o borrando el gasto generado.
                   child: TextField(
                     controller: _pagadas,
+                    enabled: widget.aEditar == null,
                     keyboardType: TextInputType.number,
                     inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                     style: TextStyle(color: context.colores.textoPrimario),
@@ -173,7 +176,7 @@ class _DialogoCuotaState extends ConsumerState<DialogoCuota> {
           child: Text('Cancelar', style: TextStyle(color: context.colores.textoSecundario)),
         ),
         ElevatedButton(
-          onPressed: _guardar,
+          onPressed: _guardando ? null : _guardar,
           style: ElevatedButton.styleFrom(backgroundColor: TemaApp.verde, foregroundColor: Colors.white),
           child: const Text('Guardar'),
         ),

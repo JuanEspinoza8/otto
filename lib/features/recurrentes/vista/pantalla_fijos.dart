@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/tema/tema_app.dart';
-import '../logica/gastos_fijos_provider.dart';
-import '../modelo/gasto_fijo.dart';
-import 'dialogo_gasto_fijo.dart';
 import '../../../core/dinero/dinero.dart';
+import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
+import '../logica/planes_provider.dart';
+import '../modelo/plan.dart';
+import 'dialogo_gasto_fijo.dart';
 
 /// Pantalla de gestión de gastos fijos mensuales.
 class PantallaFijos extends ConsumerWidget {
@@ -13,7 +14,8 @@ class PantallaFijos extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fijosAsync = ref.watch(gastosFijosControladorProvider);
+    final planesAsync = ref.watch(planesControladorProvider);
+    final fijos = ref.watch(fijosProvider);
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
@@ -28,16 +30,14 @@ class PantallaFijos extends ConsumerWidget {
         icon: const Icon(Icons.add),
         label: const Text('Nuevo fijo'),
       ),
-      body: fijosAsync.when(
+      body: planesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: TemaApp.rojo))),
-        data: (fijos) {
+        error: (e, _) => Center(child: Text('No se pudieron leer los gastos fijos', style: TextStyle(color: context.colores.textoSecundario))),
+        data: (_) {
           if (fijos.isEmpty) {
             return _VacioFijos(colores: context.colores);
           }
-          final totalActivo = fijos
-              .where((f) => f.activo)
-              .fold<double>(0, (s, f) => s + f.monto);
+          final totalActivo = fijos.where((f) => f.activo).fold(const Dinero.cero(), (s, f) => s + f.monto);
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -53,12 +53,12 @@ class PantallaFijos extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Total fijo mensual', style: TextStyle(color: context.colores.textoSecundario, fontWeight: FontWeight.bold)),
-                    Text(Dinero.desdeUnidades(totalActivo).formatear(), style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 18)),
+                    Text(totalActivo.formatear(), style: const TextStyle(color: TemaApp.rojo, fontWeight: FontWeight.bold, fontSize: 18)),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              ...fijos.map((f) => _TarjetaFijo(fijo: f)),
+              ...fijos.map((f) => _TarjetaFijo(key: ValueKey(f.id), fijo: f)),
               const SizedBox(height: 80),
             ],
           );
@@ -69,8 +69,8 @@ class PantallaFijos extends ConsumerWidget {
 }
 
 class _TarjetaFijo extends ConsumerWidget {
-  final GastoFijo fijo;
-  const _TarjetaFijo({required this.fijo});
+  final Plan fijo;
+  const _TarjetaFijo({super.key, required this.fijo});
 
   Future<void> _confirmarEliminar(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
@@ -84,7 +84,9 @@ class _TarjetaFijo extends ConsumerWidget {
         ],
       ),
     );
-    if (ok == true) ref.read(gastosFijosControladorProvider.notifier).eliminar(fijo.id!);
+    if (ok == true && context.mounted) {
+      await ejecutarConAviso(context, () => ref.read(planesControladorProvider.notifier).eliminar(fijo));
+    }
   }
 
   @override
@@ -104,14 +106,14 @@ class _TarjetaFijo extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(fijo.nombre, style: TextStyle(color: context.colores.textoPrimario, fontWeight: FontWeight.bold, fontSize: 15)),
-                Text('${Dinero.desdeUnidades(fijo.monto).formatear()} · se debita el día ${fijo.diaDebito}', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
+                Text('${fijo.monto.formatear()} · se debita el día ${fijo.diaDebito}', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12)),
               ],
             ),
           ),
           Switch(
             value: fijo.activo,
             activeThumbColor: TemaApp.verde,
-            onChanged: (_) => ref.read(gastosFijosControladorProvider.notifier).alternarActivo(fijo),
+            onChanged: (_) => ejecutarConAviso(context, () => ref.read(planesControladorProvider.notifier).alternarActivo(fijo)),
           ),
           IconButton(
             icon: Icon(Icons.edit_outlined, color: context.colores.textoSecundario, size: 20),

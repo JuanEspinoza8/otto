@@ -1,79 +1,74 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:sqflite/sqflite.dart';
 
-import '../../categorias/logica/categorias_provider.dart';
-import '../../configuracion/logica/ajustes_provider.dart';
-import '../../movimientos/logica/movimientos_provider.dart';
-import '../../movimientos/modelo/movimiento.dart';
-import '../../movimientos/repositorio/movimiento_repositorio.dart';
-import '../repositorio/recurrencia_repositorio.dart';
+import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../../../core/libro/modelo/movimiento.dart';
+import '../../../core/libro/servicio_libro.dart';
+import '../../../core/utilidades/fechas.dart';
+import '../../configuracion/repositorio/ajustes_repositorio.dart';
+import '../repositorio/avisos_repositorio.dart';
 
 part 'horas_extras_provider.g.dart';
 
-/// Gestiona la pregunta mensual "¿hiciste horas extras?".
-///
-/// Devuelve `true` si hay que mostrar el cartel este mes (hay valor de hora
-/// extra configurado y el usuario todavía no respondió en el período actual).
+/// Nombre de la categoría de ingresos en la que el monto se carga en horas.
+const String categoriaHorasExtras = 'Horas extras';
+
+/// Regla única de horas extra (formulario, pregunta mensual y Otto): el
+/// ingreso es horas × valor de la hora, y si es del mes actual la pregunta
+/// mensual queda respondida para no contarlas dos veces.
+Future<int> registrarHorasExtras(
+  DatabaseExecutor txn, {
+  required double horas,
+  required DateTime fecha,
+  String? descripcion,
+  OrigenMovimiento origen = OrigenMovimiento.manual,
+}) async {
+  if (horas <= 0) throw const ErrorLibro('Ingresá la cantidad de horas');
+  final valor = await AjustesRepositorio(txn).valorHoraExtra();
+  if (!valor.esPositivo) throw const ErrorLibro('Configurá el valor de la hora extra en Menú');
+  final categoria = await txn.query('categorias',
+      where: "tipo = 'ingreso' AND nombre = ?", whereArgs: [categoriaHorasExtras], limit: 1);
+  if (categoria.isEmpty) throw const ErrorLibro('Falta la categoría "$categoriaHorasExtras"');
+
+  final horasTexto = horas % 1 == 0 ? horas.toStringAsFixed(0) : horas.toString().replaceAll('.', ',');
+  final id = await ServicioLibro(txn).registrar(
+    tipo: TipoMovimiento.ingreso,
+    monto: valor.por(horas),
+    categoriaId: categoria.first['id'] as int,
+    fecha: fecha,
+    descripcion: (descripcion == null || descripcion.trim().isEmpty) ? '$horasTexto horas extra' : descripcion,
+    origen: origen,
+  );
+  final periodo = Periodo.de(fecha);
+  if (periodo == Periodo.de(DateTime.now())) {
+    await AvisosRepositorio(txn).marcar(AvisosRepositorio.horasExtras, periodo);
+  }
+  return id;
+}
+
+/// Pregunta mensual "¿hiciste horas extras?".
+class EstadoHorasExtras {
+  const EstadoHorasExtras({required this.preguntar, required this.valorHora});
+  final bool preguntar;
+  final Dinero valorHora;
+}
+
 @riverpod
 class HorasExtrasMes extends _$HorasExtrasMes {
-  final RecurrenciaRepositorio _recurRepo = RecurrenciaRepositorio();
-  final MovimientoRepositorio _movRepo = MovimientoRepositorio();
-
   @override
-  FutureOr<bool> build() async {
-    final valor = (ref.watch(ajustesControladorProvider).valueOrNull?['valorHoraExtra'] as double?) ?? 0.0;
-    if (valor <= 0) return false;
-    // Se muestra sólo si todavía no respondió este mes (ni "sí" ni "no").
-    final aplicadas = await _recurRepo.obtenerAplicadas(_periodo());
-    return !aplicadas.contains('horasextras:0');
+  Future<EstadoHorasExtras> build() async {
+    ref.watch(versionDatosProvider);
+    final db = await ref.watch(baseDatosProvider.future);
+    final valor = await AjustesRepositorio(db).valorHoraExtra();
+    final respondida = await AvisosRepositorio(db).resuelto(AvisosRepositorio.horasExtras, Periodo.de(DateTime.now()));
+    return EstadoHorasExtras(preguntar: valor.esPositivo && !respondida, valorHora: valor);
   }
 
-  /// Valor de la hora extra configurado.
-  double get valorHora =>
-      (ref.read(ajustesControladorProvider).valueOrNull?['valorHoraExtra'] as double?) ?? 0.0;
-
-  /// Carga las horas extra como un ingreso y marca la pregunta como respondida.
-  Future<void> registrarHoras(double horas) async {
-    if (horas <= 0) return;
-    final valor = valorHora;
-    final cats = ref.read(categoriasControladorProvider).valueOrNull ?? [];
-    final candidatas = cats.where((c) => c.tipo == 'ingreso' && c.nombre == 'Horas extras');
-    final catId = candidatas.isNotEmpty
-        ? candidatas.first.id
-        : (cats.where((c) => c.tipo == 'ingreso').isNotEmpty
-            ? cats.firstWhere((c) => c.tipo == 'ingreso').id
-            : null);
-    if (catId == null) return;
-
-    final total = horas * valor;
-    final horasTxt = horas % 1 == 0 ? horas.toStringAsFixed(0) : horas.toString();
-    final movId = await _movRepo.insertar(Movimiento(
-      monto: total,
-      fecha: DateTime.now(),
-      descripcion: '$horasTxt horas extra',
-      tipo: 'ingreso',
-      categoriaId: catId,
-    ));
-    await _recurRepo.registrar(tipo: 'horasextras', referenciaId: 0, periodo: _periodo(), movimientoId: movId);
-    ref.invalidate(movimientosControladorProvider);
-    ref.invalidateSelf();
-  }
+  Future<void> registrarHoras(double horas, {DateTime? fecha, String? descripcion}) => escribirEnTransaccion(
+      ref, (txn) => registrarHorasExtras(txn, horas: horas, fecha: fecha ?? DateTime.now(), descripcion: descripcion));
 
   /// El usuario respondió "no" este mes: no se vuelve a preguntar.
-  Future<void> descartar() async {
-    await _recurRepo.registrar(tipo: 'horasextras', referenciaId: 0, periodo: _periodo());
-    ref.invalidateSelf();
-  }
-
-  /// Marca la pregunta mensual como resuelta sin cargar nada extra. Se usa
-  /// cuando el usuario ya cargó las horas extra de este mes por el formulario,
-  /// para no contarlas dos veces.
-  Future<void> marcarResuelto() async {
-    await _recurRepo.registrar(tipo: 'horasextras', referenciaId: 0, periodo: _periodo());
-    ref.invalidateSelf();
-  }
-
-  String _periodo() {
-    final n = DateTime.now();
-    return '${n.year}-${n.month.toString().padLeft(2, '0')}';
-  }
+  Future<void> descartar() => escribirEnTransaccion(
+      ref, (txn) => AvisosRepositorio(txn).marcar(AvisosRepositorio.horasExtras, Periodo.de(DateTime.now())));
 }
