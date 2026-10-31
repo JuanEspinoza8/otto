@@ -1,345 +1,200 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
-import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
 
-/// Clase Singleton para gestionar la conexión y el ciclo de vida de SQLite.
+import 'esquema.dart';
+import 'migracion_v9.dart';
+
+/// Abre la base SQLite de la app y la migra al esquema actual.
 class GestorBaseDatos {
-  static const String _nombreBD = 'finanzas.db';
-  static const int _versionBD = 8;
+  GestorBaseDatos._();
+
+  static final GestorBaseDatos instancia = GestorBaseDatos._();
+
+  static const String nombreArchivo = 'finanzas.db';
+
+  /// Copia del archivo previa a la migración a v9 (no se borra nunca).
+  static const String nombreRespaldoV8 = 'finanzas_respaldo_v8.db';
 
   static Database? _instancia;
-
-  // Constructor privado
-  GestorBaseDatos._();
-  
-  // Instancia Singleton
-  static final GestorBaseDatos instancia = GestorBaseDatos._();
 
   /// Reemplaza la base por una abierta desde afuera (solo para tests).
   @visibleForTesting
   static void usarBaseDePrueba(Database? db) => _instancia = db;
 
-  /// Obtiene la instancia de la base de datos, inicializándola si es necesario.
   Future<Database> obtenerBaseDatos() async {
-    if (_instancia != null) return _instancia!;
-    _instancia = await _inicializarBaseDatos();
-    return _instancia!;
+    return _instancia ??= await _abrirEnDocumentos();
   }
 
-  Future<Database> _inicializarBaseDatos() async {
-    try {
-      final directorio = await getApplicationDocumentsDirectory();
-      final ruta = join(directorio.path, _nombreBD);
+  Future<String> rutaArchivo() async {
+    final directorio = await getApplicationDocumentsDirectory();
+    return join(directorio.path, nombreArchivo);
+  }
 
-      return await openDatabase(
-        ruta,
-        version: _versionBD,
-        onConfigure: (db) async => await db.execute('PRAGMA foreign_keys = ON'),
-        onCreate: _alCrear,
-        onUpgrade: _alActualizar,
+  Future<Database> _abrirEnDocumentos() async {
+    final prefs = await SharedPreferences.getInstance();
+    return abrir(await rutaArchivo(), datos: datosDesdePreferencias(prefs));
+  }
+
+  /// Valores de v8 que viven en SharedPreferences y necesita la migración.
+  static DatosMigracion datosDesdePreferencias(SharedPreferences prefs) => DatosMigracion(
+        salarioMensual: prefs.getDouble('salarioMensual') ?? 0,
+        valorHoraExtra: prefs.getDouble('valorHoraExtra') ?? 0,
+        cotizacionUsd: prefs.getDouble('dolarBlueVenta'),
+        ahora: DateTime.now(),
       );
-    } catch (error) {
-      // En un flujo ideal, esto se guardaría en logs_errores,
-      // pero como la DB no pudo abrirse, delegamos el error hacia arriba.
-      rethrow;
+
+  /// Abre (o crea) la base en [ruta]. Si es de una versión anterior, primero
+  /// copia el archivo y después la migra dentro de una transacción.
+  static Future<Database> abrir(
+    String ruta, {
+    DatabaseFactory? fabrica,
+    DatosMigracion? datos,
+    @visibleForTesting Future<void> Function(DatabaseExecutor db)? antesDeVerificar,
+  }) async {
+    await _respaldarSiHayQueMigrar(ruta);
+    return (fabrica ?? databaseFactory).openDatabase(
+      ruta,
+      options: OpenDatabaseOptions(
+        version: Esquema.version,
+        singleInstance: fabrica == null,
+        onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+        onCreate: (db, _) async {
+          await Esquema.crear(db);
+          await Esquema.sembrarCuentas(db);
+          await Esquema.sembrarCategorias(db);
+        },
+        // sqflite corre onUpgrade dentro de una transacción: si la migración
+        // lanza, no queda nada a medias.
+        onUpgrade: (db, anterior, _) async {
+          if (anterior < 8) await _actualizarHastaV8(db, anterior);
+          await MigradorV9(
+            db,
+            datos ?? DatosMigracion(ahora: DateTime.now()),
+            antesDeVerificar: antesDeVerificar,
+          ).migrar();
+        },
+      ),
+    );
+  }
+
+  /// Copia el archivo antes de migrarlo, por si algo sale mal en el teléfono.
+  static Future<void> _respaldarSiHayQueMigrar(String ruta) async {
+    if (ruta == inMemoryDatabasePath) return;
+    final archivo = File(ruta);
+    if (!await archivo.exists()) return;
+    final version = await _versionDelArchivo(archivo);
+    if (version == 0 || version >= Esquema.version) return;
+    final respaldo = File(join(dirname(ruta), nombreRespaldoV8));
+    if (await respaldo.exists()) return; // se conserva la primera copia
+    await archivo.copy(respaldo.path);
+    for (final sufijo in ['-wal', '-journal']) {
+      final extra = File('$ruta$sufijo');
+      if (await extra.exists()) await extra.copy('${respaldo.path}$sufijo');
     }
   }
 
-  /// Método ejecutado al crear la base de datos por primera vez.
-  Future<void> _alCrear(Database db, int version) async {
+  /// `user_version` de SQLite: 4 bytes big-endian en el byte 60 del archivo.
+  static Future<int> _versionDelArchivo(File archivo) async {
+    final acceso = await archivo.open();
     try {
-      // 1. Tabla: categorias
-      // presupuesto_limite se guarda como INTEGER (monto * 100) para evitar coma flotante
+      final cabecera = await acceso.read(64);
+      if (cabecera.length < 64) return 0;
+      return ByteData.sublistView(Uint8List.fromList(cabecera)).getUint32(60);
+    } finally {
+      await acceso.close();
+    }
+  }
+
+  /// Pasos históricos v1 → v8 (bases muy viejas). Después corre la v9.
+  static Future<void> _actualizarHastaV8(Database db, int anterior) async {
+    if (anterior < 2) {
       await db.execute('''
-        CREATE TABLE categorias (
+        CREATE TABLE IF NOT EXISTS metas (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           nombre TEXT NOT NULL,
-          tipo TEXT CHECK(tipo IN ('ingreso', 'gasto')),
-          color_hex TEXT NOT NULL,
-          icono TEXT NOT NULL,
-          presupuesto_limite INTEGER DEFAULT 0,
-          es_sistema INTEGER DEFAULT 0
+          icono TEXT NOT NULL DEFAULT 'flag',
+          monto_objetivo INTEGER NOT NULL DEFAULT 0,
+          monto_actual INTEGER NOT NULL DEFAULT 0,
+          moneda TEXT NOT NULL DEFAULT 'ARS',
+          fecha_creacion INTEGER NOT NULL
         )
       ''');
-
-      // 2. Tabla: movimientos
-      // monto se guarda como INTEGER (monto * 100)
-      // tipo 'ahorro' = plata que se movió del bolsillo libre a una meta.
-      //   Esas filas llevan meta_id (a qué meta) y monto_meta (el monto en la
-      //   moneda de la meta, para poder revertir con exactitud aportes en USD).
       await db.execute('''
-        CREATE TABLE movimientos (
+        CREATE TABLE IF NOT EXISTS submetas (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          monto INTEGER NOT NULL CHECK(monto > 0),
-          fecha INTEGER NOT NULL,
-          descripcion TEXT,
-          tipo TEXT CHECK(tipo IN ('ingreso', 'gasto', 'ahorro')),
-          categoria_id INTEGER,
-          meta_id INTEGER,
-          monto_meta INTEGER,
-          FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT,
-          FOREIGN KEY (meta_id) REFERENCES metas(id) ON DELETE CASCADE
+          nombre TEXT NOT NULL,
+          icono TEXT NOT NULL DEFAULT 'flag',
+          monto_objetivo INTEGER NOT NULL DEFAULT 0,
+          monto_actual INTEGER NOT NULL DEFAULT 0,
+          meta_id INTEGER NOT NULL
         )
       ''');
-
-      // 3. Tabla: logs_errores
       await db.execute('''
-        CREATE TABLE logs_errores (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          fecha INTEGER NOT NULL,
-          mensaje TEXT NOT NULL
+        CREATE TABLE IF NOT EXISTS ahorros_acumulados (
+          id INTEGER PRIMARY KEY CHECK(id = 1),
+          ahorro_previo_ars INTEGER NOT NULL DEFAULT 0,
+          ahorro_previo_usd INTEGER NOT NULL DEFAULT 0
         )
       ''');
-
-      // 4. Tabla: metas (v2)
-      await _crearTablasMetas(db);
-
-      // 5. Tabla: ahorros_acumulados (v2)
-      await _crearTablaAhorros(db);
-
-      // 6. Tablas: gastos_fijos, cuotas y recurrencias_aplicadas (v3)
-      await _crearTablasRecurrencias(db);
-
-      // Sembrado Inicial de Categorías Defecto
-      await _sembrarDatosIniciales(db);
-    } catch (error) {
-      rethrow;
     }
-  }
-
-  /// Crea las tablas de metas y submetas.
-  Future<void> _crearTablasMetas(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS metas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL,
-        icono TEXT NOT NULL DEFAULT 'flag',
-        monto_objetivo INTEGER NOT NULL DEFAULT 0,
-        monto_actual INTEGER NOT NULL DEFAULT 0,
-        moneda TEXT NOT NULL DEFAULT 'ARS',
-        fecha_creacion INTEGER NOT NULL
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS submetas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL,
-        icono TEXT NOT NULL DEFAULT 'flag',
-        monto_objetivo INTEGER NOT NULL DEFAULT 0,
-        monto_actual INTEGER NOT NULL DEFAULT 0,
-        meta_id INTEGER NOT NULL,
-        FOREIGN KEY (meta_id) REFERENCES metas(id) ON DELETE CASCADE
-      )
-    ''');
-  }
-
-  /// Crea las tablas de gastos fijos, cuotas y el registro de recurrencias
-  /// aplicadas (para no descontar dos veces el mismo mes).
-  Future<void> _crearTablasRecurrencias(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS gastos_fijos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL,
-        monto INTEGER NOT NULL DEFAULT 0,
-        categoria_id INTEGER,
-        dia_debito INTEGER NOT NULL DEFAULT 1,
-        activo INTEGER NOT NULL DEFAULT 1
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS cuotas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT NOT NULL,
-        monto_cuota INTEGER NOT NULL DEFAULT 0,
-        categoria_id INTEGER,
-        total_cuotas INTEGER NOT NULL DEFAULT 1,
-        cuotas_pagadas INTEGER NOT NULL DEFAULT 0,
-        dia_debito INTEGER NOT NULL DEFAULT 1,
-        activo INTEGER NOT NULL DEFAULT 1
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS recurrencias_aplicadas (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        tipo TEXT NOT NULL,
-        referencia_id INTEGER NOT NULL,
-        periodo TEXT NOT NULL,
-        movimiento_id INTEGER
-      )
-    ''');
-  }
-
-  /// Crea la tabla de ahorros acumulados (fila única).
-  Future<void> _crearTablaAhorros(Database db) async {
-    await db.execute('''
-      CREATE TABLE IF NOT EXISTS ahorros_acumulados (
-        id INTEGER PRIMARY KEY CHECK(id = 1),
-        ahorro_previo_ars INTEGER NOT NULL DEFAULT 0,
-        ahorro_previo_usd INTEGER NOT NULL DEFAULT 0
-      )
-    ''');
-
-    // Insertar fila única con valores en 0
-    await db.insert('ahorros_acumulados', {
-      'id': 1,
-      'ahorro_previo_ars': 0,
-      'ahorro_previo_usd': 0,
-    });
-  }
-
-  /// Estructura base para futuras migraciones de esquema sin perder datos.
-  Future<void> _alActualizar(Database db, int versionAnterior, int versionNueva) async {
-    try {
-      if (versionAnterior < 2) {
-        // Migración v1 → v2: Agregar tablas de metas y ahorros
-        await _crearTablasMetas(db);
-        await _crearTablaAhorros(db);
-      }
-      if (versionAnterior < 3) {
-        // Migración v2 → v3: Agregar gastos fijos, cuotas y recurrencias
-        await _crearTablasRecurrencias(db);
-      }
-      if (versionAnterior < 4) {
-        // Migración v3 → v4: Sembrar categorías adicionales (sin duplicar las
-        // que ya existan por nombre).
-        await _sembrarCategoriasAdicionales(db);
-      }
-      if (versionAnterior < 5) {
-        // Migración v4 → v5: moneda en metas + categoría "Horas extras".
-        try {
-          await db.execute("ALTER TABLE metas ADD COLUMN moneda TEXT NOT NULL DEFAULT 'ARS'");
-        } catch (_) {/* la columna ya podría existir */}
-        await _sembrarCategoriasAdicionales(db);
-      }
-      if (versionAnterior < 6) {
-        // Migración v5 → v6: día de débito en gastos fijos.
-        try {
-          await db.execute('ALTER TABLE gastos_fijos ADD COLUMN dia_debito INTEGER NOT NULL DEFAULT 1');
-        } catch (_) {/* la columna ya podría existir */}
-      }
-      if (versionAnterior < 7) {
-        // Migración v6 → v7: día de débito en cuotas.
-        try {
-          await db.execute('ALTER TABLE cuotas ADD COLUMN dia_debito INTEGER NOT NULL DEFAULT 1');
-        } catch (_) {/* la columna ya podría existir */}
-      }
-      if (versionAnterior < 8) {
-        // Migración v7 → v8: los aportes a metas ahora se registran como
-        // movimientos de tipo 'ahorro'. SQLite no permite modificar un CHECK
-        // con ALTER, así que recreamos la tabla movimientos preservando todas
-        // las filas existentes (los ingresos/gastos ya cargados no se pierden).
-        await _migrarMovimientosV8(db);
-      }
-    } catch (error) {
-      rethrow;
-    }
-  }
-
-  /// Recrea la tabla `movimientos` con el nuevo esquema (tipo 'ahorro' +
-  /// meta_id + monto_meta) copiando fila por fila lo que ya había.
-  Future<void> _migrarMovimientosV8(Database db) async {
-    // Si ya tiene la columna meta_id (por reinstalación parcial), no hacemos nada.
-    final info = await db.rawQuery('PRAGMA table_info(movimientos)');
-    final tieneMetaId = info.any((c) => c['name'] == 'meta_id');
-    if (tieneMetaId) return;
-
-    await db.transaction((txn) async {
-      await txn.execute('''
-        CREATE TABLE movimientos_nuevo (
+    if (anterior < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS gastos_fijos (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          monto INTEGER NOT NULL CHECK(monto > 0),
-          fecha INTEGER NOT NULL,
-          descripcion TEXT,
-          tipo TEXT CHECK(tipo IN ('ingreso', 'gasto', 'ahorro')),
+          nombre TEXT NOT NULL,
+          monto INTEGER NOT NULL DEFAULT 0,
           categoria_id INTEGER,
-          meta_id INTEGER,
-          monto_meta INTEGER,
-          FOREIGN KEY (categoria_id) REFERENCES categorias(id) ON DELETE RESTRICT,
-          FOREIGN KEY (meta_id) REFERENCES metas(id) ON DELETE CASCADE
+          dia_debito INTEGER NOT NULL DEFAULT 1,
+          activo INTEGER NOT NULL DEFAULT 1
         )
       ''');
-      await txn.execute('''
-        INSERT INTO movimientos_nuevo (id, monto, fecha, descripcion, tipo, categoria_id)
-        SELECT id, monto, fecha, descripcion, tipo, categoria_id FROM movimientos
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS cuotas (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nombre TEXT NOT NULL,
+          monto_cuota INTEGER NOT NULL DEFAULT 0,
+          categoria_id INTEGER,
+          total_cuotas INTEGER NOT NULL DEFAULT 1,
+          cuotas_pagadas INTEGER NOT NULL DEFAULT 0,
+          dia_debito INTEGER NOT NULL DEFAULT 1,
+          activo INTEGER NOT NULL DEFAULT 1
+        )
       ''');
-      await txn.execute('DROP TABLE movimientos');
-      await txn.execute('ALTER TABLE movimientos_nuevo RENAME TO movimientos');
-    });
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS recurrencias_aplicadas (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tipo TEXT NOT NULL,
+          referencia_id INTEGER NOT NULL,
+          periodo TEXT NOT NULL,
+          movimiento_id INTEGER
+        )
+      ''');
+    }
+    final columnasMetas = await _columnas(db, 'metas');
+    if (!columnasMetas.contains('moneda')) {
+      await db.execute("ALTER TABLE metas ADD COLUMN moneda TEXT NOT NULL DEFAULT 'ARS'");
+    }
+    if (!(await _columnas(db, 'gastos_fijos')).contains('dia_debito')) {
+      await db.execute('ALTER TABLE gastos_fijos ADD COLUMN dia_debito INTEGER NOT NULL DEFAULT 1');
+    }
+    if (!(await _columnas(db, 'cuotas')).contains('dia_debito')) {
+      await db.execute('ALTER TABLE cuotas ADD COLUMN dia_debito INTEGER NOT NULL DEFAULT 1');
+    }
+    if (!(await _columnas(db, 'movimientos')).contains('meta_id')) {
+      // v8 agregó los aportes ('ahorro') a movimientos; la v9 los convierte
+      // en transferencias, así que alcanza con sumar las columnas.
+      await db.execute('ALTER TABLE movimientos ADD COLUMN meta_id INTEGER');
+      await db.execute('ALTER TABLE movimientos ADD COLUMN monto_meta INTEGER');
+    }
   }
 
-  /// Inyecta automáticamente rubros indispensables la primera vez que se abre la app.
-  Future<void> _sembrarDatosIniciales(Database db) async {
-    final categoriasDefecto = [
-      {
-        'nombre': 'Sueldo',
-        'tipo': 'ingreso',
-        'color_hex': '0xFF4CAF50', // Verde
-        'icono': 'attach_money',
-        'es_sistema': 1,
-      },
-      {
-        'nombre': 'Alimentación',
-        'tipo': 'gasto',
-        'color_hex': '0xFFFF9800', // Naranja
-        'icono': 'restaurant',
-        'es_sistema': 1,
-      },
-      {
-        'nombre': 'Transporte',
-        'tipo': 'gasto',
-        'color_hex': '0xFF2196F3', // Azul
-        'icono': 'directions_car',
-        'es_sistema': 1,
-      },
-      {
-        'nombre': 'Otros Gastos',
-        'tipo': 'gasto',
-        'color_hex': '0xFF9E9E9E', // Gris
-        'icono': 'more_horiz',
-        'es_sistema': 1,
-      },
-    ];
-
-    for (final categoria in categoriasDefecto) {
-      await db.insert('categorias', categoria);
-    }
-
-    // Además del set base, sembramos un set más amplio de rubros.
-    await _sembrarCategoriasAdicionales(db);
-  }
-
-  /// Categorías adicionales (rubros comunes). `es_sistema = 0` para que el
-  /// usuario pueda editarlas o borrarlas. Se insertan evitando duplicar por
-  /// nombre, así la migración es segura para usuarios existentes.
-  Future<void> _sembrarCategoriasAdicionales(Database db) async {
-    final adicionales = [
-      // Gastos
-      {'nombre': 'Servicios', 'tipo': 'gasto', 'color_hex': '0xFFFFC107', 'icono': 'electric_bolt'},
-      {'nombre': 'Vivienda', 'tipo': 'gasto', 'color_hex': '0xFF795548', 'icono': 'home'},
-      {'nombre': 'Salud', 'tipo': 'gasto', 'color_hex': '0xFFE91E63', 'icono': 'local_hospital'},
-      {'nombre': 'Entretenimiento', 'tipo': 'gasto', 'color_hex': '0xFF9C27B0', 'icono': 'videogame_asset'},
-      {'nombre': 'Deudas', 'tipo': 'gasto', 'color_hex': '0xFFF44336', 'icono': 'category'},
-      {'nombre': 'Educación', 'tipo': 'gasto', 'color_hex': '0xFF3F51B5', 'icono': 'school'},
-      {'nombre': 'Ropa', 'tipo': 'gasto', 'color_hex': '0xFF00BCD4', 'icono': 'shopping_cart'},
-      {'nombre': 'Salidas', 'tipo': 'gasto', 'color_hex': '0xFF8D6E63', 'icono': 'local_cafe'},
-      {'nombre': 'Mascotas', 'tipo': 'gasto', 'color_hex': '0xFF689F38', 'icono': 'pets'},
-      // Ingresos
-      {'nombre': 'Horas extras', 'tipo': 'ingreso', 'color_hex': '0xFFFFB300', 'icono': 'more_time'},
-      {'nombre': 'Freelance', 'tipo': 'ingreso', 'color_hex': '0xFF26A69A', 'icono': 'attach_money'},
-      {'nombre': 'Ventas', 'tipo': 'ingreso', 'color_hex': '0xFF66BB6A', 'icono': 'shopping_cart'},
-      {'nombre': 'Otros Ingresos', 'tipo': 'ingreso', 'color_hex': '0xFF607D8B', 'icono': 'more_horiz'},
-    ];
-
-    for (final categoria in adicionales) {
-      final existe = await db.query('categorias',
-          where: 'nombre = ?', whereArgs: [categoria['nombre']], limit: 1);
-      if (existe.isEmpty) {
-        await db.insert('categorias', {...categoria, 'es_sistema': 0});
-      }
-    }
+  static Future<Set<String>> _columnas(DatabaseExecutor db, String tabla) async {
+    final info = await db.rawQuery('PRAGMA table_info($tabla)');
+    return info.map((c) => c['name'] as String).toSet();
   }
 }

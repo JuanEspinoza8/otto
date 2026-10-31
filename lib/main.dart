@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'core/base_de_datos/gestor_base_datos.dart';
 import 'core/tema/tema_app.dart';
+import 'core/ui/pantalla_error_base.dart';
 import 'core/ui/enrutador_principal.dart';
 import 'core/ui/widgets/filtro_privacidad.dart';
 import 'core/ui/widgets/bloqueo_biometrico.dart';
@@ -18,6 +20,15 @@ void main() async {
   
   // Inicializamos el formateo de fechas para la región de Argentina (o genérico en español)
   await initializeDateFormatting('es_AR', null);
+
+  // La base se abre (y si hace falta se migra) antes de mostrar la app: si la
+  // migración no cierra, se revierte y se avisa en vez de seguir con datos rotos.
+  try {
+    await GestorBaseDatos.instancia.obtenerBaseDatos();
+  } catch (error) {
+    runApp(AppErrorBase(error: error));
+    return;
+  }
 
   // Inicializar notificaciones locales
   await ServicioNotificaciones.inicializar();
