@@ -213,11 +213,54 @@ void main() {
       throwsA(isA<ErrorMigracion>()),
     );
     final v8 = await databaseFactoryFfi.openDatabase(ruta, options: OpenDatabaseOptions(singleInstance: false));
-    addTearDown(v8.close);
+    
     expect(await v8.getVersion(), 8);
     expect(await _entero(v8, 'SELECT COUNT(*) FROM movimientos'), 20);
     expect(await _entero(v8, 'SELECT monto_actual FROM metas WHERE id = ?', [metaVacaciones]), 12000000);
     expect(await _entero(v8, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'cuentas'"), 0);
+
+    // El cliente sigue usando v8 y carga un gasto; el próximo intento rehace la copia.
+    await v8.insert('movimientos', {
+      'id': 21, 'monto': 100000, 'fecha': DateTime(2026, 10, 30).millisecondsSinceEpoch,
+      'tipo': 'gasto', 'categoria_id': idAlimentacion,
+    });
+    await v8.close();
+    final db = await migrar();
+    addTearDown(db.close);
+    final copia = await databaseFactoryFfi.openDatabase(
+        p.join(directorio.path, GestorBaseDatos.nombreRespaldoV8),
+        options: OpenDatabaseOptions(readOnly: true, singleInstance: false));
+    addTearDown(copia.close);
+    expect(await _entero(copia, 'SELECT COUNT(*) FROM movimientos'), 21);
+  });
+
+  test('un aporte en dólares menor a un centavo no traba la migración', () async {
+    final v8 = await databaseFactoryFfi.openDatabase(ruta, options: OpenDatabaseOptions(singleInstance: false));
+    // $5 a un blue de 1.400 son US$0,0036: v8 guardaba monto_meta = 0.
+    await v8.insert('movimientos', {
+      'id': 30, 'monto': 500, 'fecha': DateTime(2026, 10, 3).millisecondsSinceEpoch,
+      'tipo': 'ahorro', 'meta_id': metaViaje, 'monto_meta': 0, 'descripcion': 'Ahorro: Viaje',
+    });
+    await v8.close();
+
+    final db = await migrar();
+    addTearDown(db.close);
+    // v8 no restaba esos $5 del disponible ni los sumaba a la meta.
+    expect(await _saldo(db, Esquema.cuentaLibreArs), 58449950);
+    expect(await _saldo(db, await _cuentaDeMeta(db, metaViaje)), 30000);
+    final descartados = (await db.query('ajustes', where: "clave = 'migracion_v9_descartados'")).single;
+    expect(descartados['valor'], contains('aporte en dólares sin monto en dólares'));
+  });
+
+  test('si un período está repetido, gana el que todavía tiene su movimiento', () async {
+    final v8 = await databaseFactoryFfi.openDatabase(ruta, options: OpenDatabaseOptions(singleInstance: false));
+    // El usuario borró el primero de los dos alquileres de octubre.
+    await v8.delete('movimientos', where: 'id = 15');
+    await v8.close();
+
+    final db = await migrar();
+    addTearDown(db.close);
+    expect(await _aplicaciones(db, 'Alquiler'), {'2026-09': 8, '2026-10': 16});
   });
 
   test('sin cotización, los dólares sin aporte de una meta entran como saldo inicial', () async {

@@ -158,13 +158,21 @@ class MigradorV9 {
       final actual = submetas.isEmpty
           ? _entero(m['monto_actual'])
           : submetas.fold<int>(0, (s, sub) => s + _entero(sub['monto_actual']));
-      final objetivo = _entero(m['monto_objetivo']) > 0 || submetas.isEmpty
+      final objetivo = submetas.isEmpty
           ? _entero(m['monto_objetivo'])
           : submetas.fold<int>(0, (s, sub) => s + _entero(sub['monto_objetivo']));
+      for (final sub in submetas) {
+        // v9 no tiene submetas: su plata queda en la meta y sus datos acá.
+        _resumen.descartados.add({...sub, 'motivo': 'submeta (la plata quedó en la meta)'});
+      }
 
+      // En una meta en dólares solo cuentan los aportes con monto en dólares:
+      // v8 guardaba 0 si el aporte era menor a un centavo de dólar, y esos
+      // no se pueden pasar a una transferencia (ver _copiarMovimientos).
       final aportes = await _db.rawQuery(
         "SELECT SUM(monto) AS pesos, SUM(COALESCE(monto_meta, 0)) AS en_meta "
-        "FROM movimientos WHERE tipo = 'ahorro' AND meta_id = ?",
+        "FROM movimientos WHERE tipo = 'ahorro' AND meta_id = ?"
+        "${usd ? ' AND monto_meta > 0' : ''}",
         [id],
       );
       final pesos = _entero(aportes.first['pesos']);
@@ -268,11 +276,10 @@ class MigradorV9 {
           if (meta.usd) {
             destino = _entero(f['monto_meta']);
             if (destino <= 0) {
-              final tasa = _tasaDe(meta);
-              if (tasa == null) {
-                throw ErrorMigracion('Aporte $id en dólares sin monto ni cotización');
-              }
-              destino = (_entero(f['monto']) / tasa).round();
+              // Menos de un centavo de dólar: v8 no lo sumó a la meta ni lo
+              // restó del disponible, así que los pesos quedan libres.
+              _resumen.descartados.add({...f, 'motivo': 'aporte en dólares sin monto en dólares'});
+              continue;
             }
           }
           await _db.insert('movimientos', {
@@ -423,16 +430,22 @@ class MigradorV9 {
     final recurrencias = await _db.query('recurrencias_aplicadas_v8', orderBy: 'id');
 
     // Períodos aplicados por concepto ("fijo:3" → {2026-09: movId}). Si un
-    // período está repetido (doble toque), queda el primero.
+    // período está repetido (doble toque), queda el primero cuyo movimiento
+    // todavía existe.
     final aplicadas = <String, Map<Periodo, int?>>{};
     for (final r in recurrencias) {
       final tipo = r['tipo'] as String;
       if (!const {'sueldo', 'fijo', 'cuota'}.contains(tipo)) continue;
-      final periodo = Periodo.parsear(r['periodo'] as String);
+      final periodo = _periodo(r['periodo']);
+      if (periodo == null) {
+        _resumen.descartados.add({...r, 'motivo': 'período inválido'});
+        continue;
+      }
       final porPeriodo = aplicadas.putIfAbsent('$tipo:${r['referencia_id']}', () => {});
-      if (porPeriodo.containsKey(periodo)) continue;
       final mov = r['movimiento_id'] as int?;
-      porPeriodo[periodo] = mov != null && _movimientosMigrados.contains(mov) ? mov : null;
+      final existente = mov != null && _movimientosMigrados.contains(mov) ? mov : null;
+      if (porPeriodo.containsKey(periodo) && (porPeriodo[periodo] != null || existente == null)) continue;
+      porPeriodo[periodo] = existente;
     }
 
     Periodo primero(Map<Periodo, int?>? periodos) =>
@@ -522,7 +535,11 @@ class MigradorV9 {
     final ordenados = aplicadas.keys.toList()..sort();
     final resultado = <Periodo, int?>{};
     if (ordenados.length >= pagadas) {
-      for (final p in ordenados.sublist(ordenados.length - pagadas)) {
+      final sobran = ordenados.length - pagadas;
+      for (final p in ordenados.take(sobran)) {
+        _resumen.descartados.add({'motivo': 'cuota aplicada de más', 'periodo': '$p', 'movimiento_id': aplicadas[p]});
+      }
+      for (final p in ordenados.skip(sobran)) {
         resultado[p] = aplicadas[p];
       }
       return resultado;
@@ -645,7 +662,22 @@ class MigradorV9 {
     }
   }
 
-  static int _entero(Object? valor) => valor == null ? 0 : (valor as num).round();
+  static int _entero(Object? valor) {
+    if (valor == null) return 0;
+    if (valor is num) return valor.round();
+    final numero = num.tryParse('$valor'.trim());
+    if (numero == null) throw ErrorMigracion('Valor numérico inválido: $valor');
+    return numero.round();
+  }
+
+  static Periodo? _periodo(Object? texto) {
+    final partes = '$texto'.split('-');
+    if (partes.length != 2) return null;
+    final anio = int.tryParse(partes[0]);
+    final mes = int.tryParse(partes[1]);
+    if (anio == null || mes == null || mes < 1 || mes > 12) return null;
+    return Periodo(anio, mes);
+  }
 }
 
 class _MetaV8 {

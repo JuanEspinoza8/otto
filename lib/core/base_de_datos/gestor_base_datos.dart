@@ -89,12 +89,18 @@ class GestorBaseDatos {
     if (!await archivo.exists()) return;
     final version = await _versionDelArchivo(archivo);
     if (version == 0 || version >= Esquema.version) return;
+    // Si un intento anterior falló, la base siguió en v8 (y pudo recibir datos
+    // nuevos): la copia se rehace en cada intento con el estado actual.
     final respaldo = File(join(dirname(ruta), nombreRespaldoV8));
-    if (await respaldo.exists()) return; // se conserva la primera copia
     await archivo.copy(respaldo.path);
     for (final sufijo in ['-wal', '-journal']) {
       final extra = File('$ruta$sufijo');
-      if (await extra.exists()) await extra.copy('${respaldo.path}$sufijo');
+      final copiaExtra = File('${respaldo.path}$sufijo');
+      if (await extra.exists()) {
+        await extra.copy(copiaExtra.path);
+      } else if (await copiaExtra.exists()) {
+        await copiaExtra.delete();
+      }
     }
   }
 
