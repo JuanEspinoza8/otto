@@ -1,139 +1,112 @@
-import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../recurrentes/modelo/plan.dart';
 
+/// Recordatorios diarios y avisos de gastos fijos.
+///
+/// Usa alarmas inexactas: para un recordatorio alcanzan y no requieren los
+/// permisos restringidos de alarmas exactas ni excepciones de batería.
 class ServicioNotificaciones {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
 
-  /// Rango de ids reservado para recordatorios de gastos fijos.
+  /// Ids 0..99 para recordatorios diarios; desde 100, avisos de gastos fijos.
   static const int _baseIdFijos = 100;
+  static const int _maxFijos = 60;
 
   static Future<void> inicializar() async {
     tz.initializeTimeZones();
-    // IMPORTANTE: sin esto tz.local queda en UTC y los recordatorios se
-    // programan con ~3 h de diferencia (o nunca disparan a la hora esperada).
     try {
-      tz.setLocalLocation(tz.getLocation('America/Argentina/Buenos_Aires'));
-    } catch (_) {/* fallback: queda en UTC */}
+      // Zona horaria del teléfono; sin esto tz.local queda en UTC y los avisos
+      // salen corridos.
+      final zona = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(zona.identifier));
+    } catch (_) {/* queda en UTC */}
 
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
-    
-    // Configuración genérica (sin iOS porque se pidió Android/multiplataforma pero enfocamos Android por ahora)
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
+    await _plugin.initialize(
+      const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
     );
-
-    await _plugin.initialize(initializationSettings);
-    // El permiso de notificaciones NO se pide acá (al arrancar, antes del
-    // onboarding): se pide recién cuando el usuario activa los recordatorios
-    // (ver pedirPermisoNotificaciones).
   }
 
-  /// Pide el permiso de notificaciones (Android 13+) y de alarmas exactas.
-  /// Se llama cuando el usuario ACTIVA los recordatorios, no al arrancar.
-  static Future<void> pedirPermisoNotificaciones() async {
-    final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+  static AndroidFlutterLocalNotificationsPlugin? get _android =>
+      _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+  /// Si la app puede mostrar notificaciones (en Android 13+ hace falta permiso).
+  static Future<bool> permisoConcedido() async => await _android?.areNotificationsEnabled() ?? false;
+
+  /// Pide el permiso de notificaciones. Devuelve si quedó concedido.
+  static Future<bool> pedirPermiso() async {
     try {
-      await android?.requestNotificationsPermission();
-      await android?.requestExactAlarmsPermission();
-    } catch (_) {/* algunas versiones no exponen estos métodos */}
+      await _android?.requestNotificationsPermission();
+    } catch (_) {/* versiones viejas no lo exponen */}
+    return permisoConcedido();
   }
 
   static Future<void> reprogramarNotificaciones(List<String> horarios) async {
-    // Cancelamos SÓLO el rango de recordatorios diarios (no los avisos de
-    // gastos fijos, que viven en el rango _baseIdFijos+). Antes se usaba
-    // cancelAll() y borraba los avisos de fijos en cada arranque de la app.
     await cancelarRecordatoriosDiarios();
-
-    for (int i = 0; i < horarios.length; i++) {
-      final horaParts = horarios[i].split(':');
-      if (horaParts.length == 2) {
-        final hora = int.parse(horaParts[0]);
-        final minuto = int.parse(horaParts[1]);
-        
-        await _programarNotificacionDiaria(
-          id: i,
-          titulo: '¿Ya cargaste tus gastos?',
-          cuerpo: 'Otto te recuerda anotar tus movimientos del día para no perder el control.',
-          hora: hora,
-          minuto: minuto,
-        );
-      }
-    }
-  }
-
-  static Future<void> _programarNotificacionDiaria({
-    required int id,
-    required String titulo,
-    required String cuerpo,
-    required int hora,
-    required int minuto,
-  }) async {
-    await _plugin.zonedSchedule(
-      id,
-      titulo,
-      cuerpo,
-      _siguienteInstanciaDe(hora, minuto),
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'canal_recordatorios',
-          'Recordatorios Diarios',
-          channelDescription: 'Canal para recordatorios de carga de gastos',
-          importance: Importance.max,
-          priority: Priority.high,
+    for (var i = 0; i < horarios.length && i < _baseIdFijos; i++) {
+      final partes = horarios[i].split(':');
+      if (partes.length != 2) continue;
+      final hora = int.tryParse(partes[0]);
+      final minuto = int.tryParse(partes[1]);
+      if (hora == null || minuto == null) continue;
+      await _plugin.zonedSchedule(
+        i,
+        '¿Ya cargaste tus gastos?',
+        'Otto te recuerda anotar tus movimientos del día para no perder el control.',
+        _proximaHora(hora, minuto),
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'canal_recordatorios',
+            'Recordatorios diarios',
+            channelDescription: 'Recordatorio para cargar los gastos del día',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
         ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time, // Repetir todos los días a la misma hora
-    );
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
+      );
+    }
   }
 
-  static tz.TZDateTime _siguienteInstanciaDe(int hora, int minuto) {
-    final tz.TZDateTime ahora = tz.TZDateTime.now(tz.local);
-    tz.TZDateTime programada = tz.TZDateTime(tz.local, ahora.year, ahora.month, ahora.day, hora, minuto);
-    if (programada.isBefore(ahora)) {
-      programada = programada.add(const Duration(days: 1));
-    }
+  static tz.TZDateTime _proximaHora(int hora, int minuto) {
+    final ahora = tz.TZDateTime.now(tz.local);
+    var programada = tz.TZDateTime(tz.local, ahora.year, ahora.month, ahora.day, hora, minuto);
+    if (programada.isBefore(ahora)) programada = programada.add(const Duration(days: 1));
     return programada;
   }
 
-  /// Reprograma un aviso mensual, 2 días antes del débito de cada gasto fijo.
+  /// Un aviso mensual dos días antes del débito de cada gasto fijo activo.
   static Future<void> reprogramarFijos(List<Plan> fijos) async {
-    // Limpiamos el rango reservado para fijos.
-    for (int i = _baseIdFijos; i < _baseIdFijos + 60; i++) {
-      await _plugin.cancel(i);
-    }
-    int idx = _baseIdFijos;
-    for (final f in fijos) {
-      if (!f.activo) continue;
-      final diaAviso = (f.diaDebito - 2).clamp(1, 28);
+    await _cancelarRango(_baseIdFijos, _baseIdFijos + _maxFijos);
+    var id = _baseIdFijos;
+    for (final f in fijos.where((f) => f.activo).take(_maxFijos)) {
       await _plugin.zonedSchedule(
-        idx++,
+        id++,
         'Se viene un gasto fijo 📅',
         'En unos días se debita "${f.nombre}". Cuando lo pagues, confirmalo en la app.',
-        _siguienteInstanciaMensual(diaAviso, 10, 0),
+        _proximoDia((f.diaDebito - 2).clamp(1, 28), 10, 0),
         const NotificationDetails(
           android: AndroidNotificationDetails(
             'canal_fijos',
             'Avisos de gastos fijos',
-            channelDescription: 'Recordatorio previo al débito de gastos fijos',
-            importance: Importance.max,
+            channelDescription: 'Aviso previo al débito de un gasto fijo',
+            importance: Importance.high,
             priority: Priority.high,
           ),
         ),
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime, // repetir cada mes ese día
+        matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
       );
-      if (idx >= _baseIdFijos + 60) break;
     }
   }
 
-  static tz.TZDateTime _siguienteInstanciaMensual(int dia, int hora, int minuto) {
+  static tz.TZDateTime _proximoDia(int dia, int hora, int minuto) {
     final ahora = tz.TZDateTime.now(tz.local);
     var programada = tz.TZDateTime(tz.local, ahora.year, ahora.month, dia, hora, minuto);
     if (programada.isBefore(ahora)) {
@@ -142,25 +115,9 @@ class ServicioNotificaciones {
     return programada;
   }
 
-  static const MethodChannel _canal = MethodChannel('otto/bateria');
-
-  /// Pide al usuario (con un diálogo del sistema) eximir a la app de la
-  /// optimización de batería, para que las notificaciones programadas no se
-  /// maten en segundo plano (importante en Samsung/Xiaomi). Implementado con
-  /// un MethodChannel nativo (sin dependencias extra).
-  static Future<void> pedirIgnorarOptimizacionBateria() async {
-    try {
-      await _canal.invokeMethod('pedirIgnorarBateria');
-    } catch (_) {/* no disponible en algunos dispositivos */}
-  }
-
-  /// Muestra una notificación inmediata (para que el usuario verifique que las
-  /// notificaciones están habilitadas).
+  /// Notificación inmediata para comprobar que llegan.
   static Future<void> mostrarPrueba() async {
-    final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
-    try {
-      await android?.requestNotificationsPermission();
-    } catch (_) {}
+    await pedirPermiso();
     await _plugin.show(
       999,
       '¡Hola! Soy Otto 🦫',
@@ -170,22 +127,20 @@ class ServicioNotificaciones {
           'canal_prueba',
           'Prueba de notificaciones',
           channelDescription: 'Notificación de prueba',
-          importance: Importance.max,
+          importance: Importance.high,
           priority: Priority.high,
         ),
       ),
     );
   }
 
-  /// Cancela sólo el rango de recordatorios diarios (ids 0.._baseIdFijos-1),
-  /// preservando los avisos de gastos fijos (ids _baseIdFijos+).
-  static Future<void> cancelarRecordatoriosDiarios() async {
-    for (int i = 0; i < _baseIdFijos; i++) {
-      await _plugin.cancel(i);
-    }
-  }
+  static Future<void> cancelarRecordatoriosDiarios() => _cancelarRango(0, _baseIdFijos);
 
-  static Future<void> cancelarTodas() async {
-    await _plugin.cancelAll();
+  /// Cancela solo las notificaciones programadas de ese rango de ids.
+  static Future<void> _cancelarRango(int desde, int hasta) async {
+    final pendientes = await _plugin.pendingNotificationRequests();
+    for (final p in pendientes) {
+      if (p.id >= desde && p.id < hasta) await _plugin.cancel(p.id);
+    }
   }
 }
