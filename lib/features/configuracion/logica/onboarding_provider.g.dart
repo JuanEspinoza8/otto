@@ -7,10 +7,9 @@ part of 'onboarding_provider.dart';
 // **************************************************************************
 
 String _$onboardingControladorHash() =>
-    r'1f6bbccdc4015c2577149425227d7d974f344b17';
+    r'68ee4419acf299500e998e6a244a6205f2bbf537';
 
-/// Provider que controla si el onboarding ya fue completado
-/// y almacena los datos de configuración inicial del usuario.
+/// Si el usuario ya completó la configuración inicial.
 ///
 /// Copied from [OnboardingControlador].
 @ProviderFor(OnboardingControlador)

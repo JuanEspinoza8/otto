@@ -43,8 +43,8 @@ class _PantallaOnboardingState extends ConsumerState<PantallaOnboarding> {
 
   Future<void> _finalizar() async {
     final nombre = _controladorNombre.text.trim();
-    final salario = Dinero.parsear(_controladorSalario.text)?.unidades ?? 0;
-    final horaExtra = Dinero.parsear(_controladorHoraExtra.text)?.unidades ?? 0;
+    final salario = Dinero.parsear(_controladorSalario.text) ?? const Dinero.cero();
+    final horaExtra = Dinero.parsear(_controladorHoraExtra.text) ?? const Dinero.cero();
 
     await ref.read(onboardingControladorProvider.notifier).completarOnboarding(
       nombre: nombre.isNotEmpty ? nombre : 'Usuario',

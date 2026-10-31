@@ -3,7 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
-import '../../recurrentes/modelo/gasto_fijo.dart';
+import '../../recurrentes/modelo/plan.dart';
 
 class ServicioNotificaciones {
   static final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
@@ -102,7 +102,7 @@ class ServicioNotificaciones {
   }
 
   /// Reprograma un aviso mensual, 2 días antes del débito de cada gasto fijo.
-  static Future<void> reprogramarFijos(List<GastoFijo> fijos) async {
+  static Future<void> reprogramarFijos(List<Plan> fijos) async {
     // Limpiamos el rango reservado para fijos.
     for (int i = _baseIdFijos; i < _baseIdFijos + 60; i++) {
       await _plugin.cancel(i);

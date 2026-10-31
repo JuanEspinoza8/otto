@@ -1,40 +1,34 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/dinero/dinero.dart';
+import '../../../core/libro/libro_providers.dart';
+import '../../recurrentes/logica/servicio_planes.dart';
+import '../repositorio/ajustes_repositorio.dart';
+
 part 'onboarding_provider.g.dart';
 
-/// Provider que controla si el onboarding ya fue completado
-/// y almacena los datos de configuración inicial del usuario.
+/// Si el usuario ya completó la configuración inicial.
 @Riverpod(keepAlive: true)
 class OnboardingControlador extends _$OnboardingControlador {
-  late SharedPreferences _prefs;
+  static const _kCompleto = 'onboardingCompleto';
 
   @override
-  FutureOr<bool> build() async {
-    _prefs = await SharedPreferences.getInstance();
-    return _prefs.getBool('onboardingCompleto') ?? false;
-  }
+  Future<bool> build() async => (await SharedPreferences.getInstance()).getBool(_kCompleto) ?? false;
 
-  /// Guarda los datos del onboarding y lo marca como completado.
+  /// Guarda el nombre, crea el plan del sueldo y el valor de la hora extra.
   Future<void> completarOnboarding({
     required String nombre,
-    required double salarioMensual,
-    double valorHoraExtra = 0,
+    required Dinero salarioMensual,
+    required Dinero valorHoraExtra,
   }) async {
-    await _prefs.setString('nombreUsuario', nombre);
-    await _prefs.setDouble('salarioMensual', salarioMensual);
-    await _prefs.setDouble('valorHoraExtra', valorHoraExtra);
-    await _prefs.setBool('onboardingCompleto', true);
+    await escribirEnTransaccion(ref, (txn) async {
+      await ServicioPlanes(txn).fijarSueldo(salarioMensual, hoy: DateTime.now());
+      if (valorHoraExtra.esPositivo) await AjustesRepositorio(txn).fijarValorHoraExtra(valorHoraExtra);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('nombreUsuario', nombre);
+    await prefs.setBool(_kCompleto, true);
     state = const AsyncData(true);
-  }
-
-  /// Obtiene el nombre del usuario guardado.
-  String obtenerNombre() {
-    return _prefs.getString('nombreUsuario') ?? '';
-  }
-
-  /// Obtiene el salario mensual guardado.
-  double obtenerSalario() {
-    return _prefs.getDouble('salarioMensual') ?? 0;
   }
 }

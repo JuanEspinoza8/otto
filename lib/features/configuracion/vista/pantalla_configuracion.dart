@@ -4,7 +4,7 @@ import '../../../core/tema/tema_app.dart';
 import '../../panel_control/vista/pantalla_resumen_mes.dart';
 import '../logica/ajustes_provider.dart';
 import '../logica/servicio_notificaciones.dart';
-import '../logica/servicio_respaldo.dart';
+import 'seccion_respaldo.dart';
 import '../../panel_control/vista/widget_ahorros_acumulados.dart';
 import '../../categorias/vista/pantalla_categorias.dart';
 import '../../../core/dinero/dinero.dart';
@@ -57,18 +57,14 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
   @override
   Widget build(BuildContext context) {
     final ajustesAsync = ref.watch(ajustesControladorProvider);
-    final ajustes = ajustesAsync.valueOrNull ?? {
-      'biometriaActiva': false,
-      'recordatorioDiario': true,
-      'horariosRecordatorios': ['20:00'],
-    };
+    final ajustes = ajustesAsync.valueOrNull;
 
-    final biometriaActiva = ajustes['biometriaActiva'] as bool;
-    final recordatorioDiario = ajustes['recordatorioDiario'] as bool;
-    final horarios = List<String>.from(ajustes['horariosRecordatorios'] ?? []);
-    final nombreUsuario = ajustes['nombreUsuario'] as String? ?? '';
-    final salarioMensual = ajustes['salarioMensual'] as double? ?? 0.0;
-    final valorHoraExtra = ajustes['valorHoraExtra'] as double? ?? 0.0;
+    final biometriaActiva = ajustes?.biometriaActiva ?? false;
+    final recordatorioDiario = ajustes?.recordatorioDiario ?? true;
+    final horarios = ajustes?.horariosRecordatorios ?? const ['20:00'];
+    final nombreUsuario = ajustes?.nombreUsuario ?? '';
+    final salarioMensual = ajustes?.salarioMensual ?? const Dinero.cero();
+    final valorHoraExtra = ajustes?.valorHoraExtra ?? const Dinero.cero();
 
     return Scaffold(
       backgroundColor: context.colores.fondo,
@@ -101,12 +97,12 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
                   leading: const Icon(Icons.attach_money, color: Colors.blueGrey),
                   title: const Text('Salario mensual'),
                   subtitle: Text(
-                    salarioMensual > 0 ? Dinero.desdeUnidades(salarioMensual).formatear() : 'Sin configurar',
+                    salarioMensual.esPositivo ? salarioMensual.formatear() : 'Sin configurar',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.edit, size: 16, color: Colors.grey),
-                  onTap: () => _editarTexto(context, ref, 'Salario mensual', Dinero.desdeUnidades(salarioMensual).textoEditable, (valor) {
-                    final salario = (Dinero.parsear(valor)?.unidades ?? 0);
+                  onTap: () => _editarTexto(context, ref, 'Salario mensual', salarioMensual.textoEditable, (valor) {
+                    final salario = Dinero.parsear(valor) ?? const Dinero.cero();
                     ref.read(ajustesControladorProvider.notifier).actualizarSalario(salario);
                   }),
                 ),
@@ -115,12 +111,12 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
                   leading: const Icon(Icons.more_time, color: Colors.blueGrey),
                   title: const Text('Valor de hora extra'),
                   subtitle: Text(
-                    valorHoraExtra > 0 ? '${Dinero.desdeUnidades(valorHoraExtra).formatear()} por hora' : 'Sin configurar',
+                    valorHoraExtra.esPositivo ? '${valorHoraExtra.formatear()} por hora' : 'Sin configurar',
                     style: const TextStyle(fontSize: 12),
                   ),
                   trailing: const Icon(Icons.edit, size: 16, color: Colors.grey),
-                  onTap: () => _editarTexto(context, ref, 'Valor de hora extra', Dinero.desdeUnidades(valorHoraExtra).textoEditable, (valor) {
-                    final v = (Dinero.parsear(valor)?.unidades ?? 0);
+                  onTap: () => _editarTexto(context, ref, 'Valor de hora extra', valorHoraExtra.textoEditable, (valor) {
+                    final v = Dinero.parsear(valor) ?? const Dinero.cero();
                     ref.read(ajustesControladorProvider.notifier).actualizarValorHoraExtra(v);
                   }),
                 ),
@@ -247,55 +243,7 @@ class _PantallaConfiguracionState extends ConsumerState<PantallaConfiguracion> {
           const SizedBox(height: 24),
           Text('DATOS Y RESPALDOS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: context.colores.textoSecundario, letterSpacing: 1.2)),
           const SizedBox(height: 8),
-          Container(
-            decoration: BoxDecoration(color: context.colores.superficie, borderRadius: BorderRadius.circular(16), border: Border.all(color: context.colores.borde)),
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.upload_file, color: Colors.blue),
-                  title: const Text('Exportar Base de Datos'),
-                  subtitle: const Text('Guardar un archivo JSON con tus datos', style: TextStyle(fontSize: 12)),
-                  onTap: () async {
-                    final exito = await ServicioRespaldo.exportarAJSON();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(exito ? 'Exportación exitosa' : 'Error al exportar')),
-                      );
-                    }
-                  },
-                ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.file_download, color: Colors.orange),
-                  title: const Text('Importar Base de Datos'),
-                  subtitle: const Text('Cargar datos desde un archivo JSON (¡Reemplazará lo actual!)', style: TextStyle(fontSize: 12)),
-                  onTap: () async {
-                    // Mostrar advertencia primero
-                    final confirmar = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('¿Estás seguro?'),
-                        content: const Text('Importar un respaldo reemplazará todos los movimientos y categorías actuales. Esta acción no se puede deshacer.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Importar', style: TextStyle(color: Colors.red))),
-                        ],
-                      )
-                    );
-                    
-                    if (confirmar == true && context.mounted) {
-                      final exito = await ServicioRespaldo.importarDeJSON(ref);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(exito ? 'Datos restaurados correctamente' : 'Error al importar datos')),
-                        );
-                      }
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
+          const SeccionRespaldo(),
           
           const SizedBox(height: 40),
           Center(child: Text('Otto v1.0', style: TextStyle(color: context.colores.textoSecundario, fontSize: 12))),
