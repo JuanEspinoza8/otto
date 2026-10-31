@@ -5,8 +5,8 @@ import '../../../core/dinero/formateador_monto.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import '../logica/categorias_provider.dart';
 import '../modelo/categoria.dart';
-import '../../../core/base_de_datos/gestor_base_datos.dart';
-import '../../movimientos/logica/movimientos_provider.dart';
+import '../../../core/ui/acciones.dart';
+import 'dialogo_borrar_categoria.dart';
 
 class PantallaFormularioCategoria extends ConsumerStatefulWidget {
   final Categoria? categoriaAEditar;
@@ -23,7 +23,12 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
   late String _tipo;
   late String _colorHex;
   late String _icono;
-  late double _presupuestoLimite;
+  late Dinero _presupuestoLimite;
+
+  /// Movimientos y planes que usan la categoría: con alguno, el tipo no se
+  /// puede cambiar (ingresos pasarían a contarse como gastos).
+  int _usos = 0;
+  bool _guardando = false;
 
   final List<String> _colores = [
     '0xFFF44336', '0xFFE91E63', '0xFF9C27B0', '0xFF673AB7',
@@ -40,98 +45,39 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
     _tipo = cat?.tipo ?? 'gasto';
     _colorHex = cat?.colorHex ?? '0xFF2196F3';
     _icono = cat?.icono ?? 'category';
-    _presupuestoLimite = cat?.presupuestoLimite ?? 0.0;
-  }
-
-  void _guardar() {
-    if (_llaveFormulario.currentState!.validate()) {
-      _llaveFormulario.currentState!.save();
-      final nuevaCategoria = Categoria(
-        id: widget.categoriaAEditar?.id,
-        nombre: _nombre,
-        tipo: _tipo,
-        colorHex: _colorHex,
-        icono: _icono,
-        presupuestoLimite: _presupuestoLimite,
-        esSistema: widget.categoriaAEditar?.esSistema ?? false,
-      );
-
-      if (widget.categoriaAEditar == null) {
-        ref.read(categoriasControladorProvider.notifier).agregarCategoria(nuevaCategoria);
-      } else {
-        ref.read(categoriasControladorProvider.notifier).actualizarCategoria(nuevaCategoria);
-      }
-
-      Navigator.pop(context);
+    _presupuestoLimite = cat?.presupuestoLimite ?? const Dinero.cero();
+    if (cat != null) {
+      ref.read(categoriasControladorProvider.notifier).usos(cat).then((n) {
+        if (mounted) setState(() => _usos = n);
+      });
     }
   }
 
-  Future<void> _verificarOEliminar() async {
-    if (widget.categoriaAEditar == null || widget.categoriaAEditar!.esSistema) return;
-
-    final db = await GestorBaseDatos.instancia.obtenerBaseDatos();
-    final res = await db.query('movimientos', where: 'categoria_id = ?', whereArgs: [widget.categoriaAEditar!.id!]);
-    
-    if (res.isNotEmpty) {
-      if (!mounted) return;
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Categoría en uso'),
-          content: Text('Esta categoría tiene ${res.length} movimientos asociados. Al borrarla, se reasignarán automáticamente a la primera categoría disponible del mismo tipo ("Otros") para mantener tus saldos cuadrados.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            TextButton(
-              onPressed: () async {
-                 // Capturamos los objetos de navegación/mensajería ANTES de los
-                 // await para no usar el BuildContext después de un gap async.
-                 final navegadorDialogo = Navigator.of(ctx);
-                 final navegadorPantalla = Navigator.of(context);
-                 final messenger = ScaffoldMessenger.of(context);
-                 final alternativas = await db.query('categorias', where: 'id != ? AND tipo = ?', whereArgs: [widget.categoriaAEditar!.id!, widget.categoriaAEditar!.tipo]);
-                 if (alternativas.isEmpty) {
-                   navegadorDialogo.pop();
-                   messenger.showSnackBar(const SnackBar(content: Text('No hay otra categoría para reasignar.')));
-                   return;
-                 }
-                 final idDestino = alternativas.first['id'];
-                 await db.update('movimientos', {'categoria_id': idDestino}, where: 'categoria_id = ?', whereArgs: [widget.categoriaAEditar!.id!]);
-
-                 ref.read(categoriasControladorProvider.notifier).eliminarCategoria(widget.categoriaAEditar!.id!);
-                 ref.invalidate(movimientosControladorProvider);
-
-                 navegadorDialogo.pop(); // Cierra diálogo
-                 navegadorPantalla.pop(); // Cierra formulario
-              },
-              child: const Text('Reasignar y Borrar', style: TextStyle(color: Colors.red)),
-            ),
-          ],
-        ),
-      );
-    } else {
-      _confirmarEliminacionDirecta();
-    }
-  }
-
-  void _confirmarEliminacionDirecta() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Eliminar Categoría'),
-        content: const Text('¿Estás seguro de que deseas eliminar esta categoría? No tiene movimientos asociados.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          TextButton(
-            onPressed: () {
-              ref.read(categoriasControladorProvider.notifier).eliminarCategoria(widget.categoriaAEditar!.id!);
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            child: const Text('Eliminar', style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+  Future<void> _guardar() async {
+    if (!_llaveFormulario.currentState!.validate()) return;
+    _llaveFormulario.currentState!.save();
+    final categoria = Categoria(
+      id: widget.categoriaAEditar?.id,
+      nombre: _nombre,
+      tipo: _tipo,
+      colorHex: _colorHex,
+      icono: _icono,
+      presupuestoLimite: _presupuestoLimite,
+      esSistema: widget.categoriaAEditar?.esSistema ?? false,
     );
+    final controlador = ref.read(categoriasControladorProvider.notifier);
+    setState(() => _guardando = true);
+    final ok = await ejecutarConAviso(
+      context,
+      () async => widget.categoriaAEditar == null ? await controlador.agregar(categoria) : await controlador.actualizar(categoria),
+    );
+    if (!mounted) return;
+    ok ? Navigator.pop(context) : setState(() => _guardando = false);
+  }
+
+  Future<void> _eliminar() async {
+    final borrada = await DialogoBorrarCategoria.mostrar(context, ref, widget.categoriaAEditar!);
+    if (borrada && mounted) Navigator.pop(context);
   }
 
   @override
@@ -149,7 +95,7 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
           if (esEdicion && !esSistema)
               IconButton(
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: _verificarOEliminar,
+                onPressed: _eliminar,
               )
         ],
       ),
@@ -176,13 +122,13 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
                   DropdownMenuItem(value: 'ingreso', child: Text('Ingreso')),
                   DropdownMenuItem(value: 'gasto', child: Text('Gasto')),
                 ],
-                onChanged: esSistema ? null : (valor) { if (valor != null) setState(() => _tipo = valor); },
+                onChanged: (esSistema || _usos > 0) ? null : (valor) { if (valor != null) setState(() => _tipo = valor); },
               ),
             ),
             const SizedBox(height: 16),
             _ConstruirCaja(
               hijo: TextFormField(
-                initialValue: Dinero.desdeUnidades(_presupuestoLimite).textoEditable,
+                initialValue: _presupuestoLimite.textoEditable,
                 decoration: const InputDecoration(labelText: 'Presupuesto Límite (Opcional)', border: InputBorder.none),
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [FormateadorMonto()],
@@ -190,7 +136,7 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
                   if (valor == null || valor.trim().isEmpty) return null;
                   return Dinero.parsear(valor) == null ? 'Monto inválido' : null;
                 },
-                onSaved: (valor) => _presupuestoLimite = Dinero.parsear(valor ?? '')?.unidades ?? 0,
+                onSaved: (valor) => _presupuestoLimite = Dinero.parsear(valor ?? '') ?? const Dinero.cero(),
               ),
             ),
             const SizedBox(height: 24),
@@ -254,7 +200,7 @@ class _PantallaFormularioCategoriaState extends ConsumerState<PantallaFormulario
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 4,
               ),
-              onPressed: _guardar,
+              onPressed: _guardando ? null : _guardar,
               child: const Text('Guardar Categoría', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 20),

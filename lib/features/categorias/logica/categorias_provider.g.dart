@@ -7,7 +7,7 @@ part of 'categorias_provider.dart';
 // **************************************************************************
 
 String _$categoriasControladorHash() =>
-    r'55ee2d78419194b757f42a20a1388d7c5cd3285d';
+    r'c386ab4c7b95a870ecea14bbec85d465eec3a4e1';
 
 /// See also [CategoriasControlador].
 @ProviderFor(CategoriasControlador)

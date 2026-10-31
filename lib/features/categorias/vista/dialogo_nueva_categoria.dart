@@ -2,18 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/tema/tema_app.dart';
+import '../../../core/ui/acciones.dart';
 import '../../../core/utilidades/mapeador_iconos.dart';
 import '../logica/categorias_provider.dart';
 import '../modelo/categoria.dart';
 
 /// Diálogo rápido para crear una categoría desde la pantalla de registro.
-/// Devuelve el nombre de la categoría creada (o null si se canceló).
+/// Devuelve el id de la categoría creada (o null si se canceló).
 class DialogoNuevaCategoria extends ConsumerStatefulWidget {
   final String tipo; // 'gasto' o 'ingreso'
   const DialogoNuevaCategoria({super.key, required this.tipo});
 
-  static Future<String?> mostrar(BuildContext context, String tipo) {
-    return showDialog<String>(
+  static Future<int?> mostrar(BuildContext context, String tipo) {
+    return showDialog<int>(
       context: context,
       builder: (_) => DialogoNuevaCategoria(tipo: tipo),
     );
@@ -48,10 +49,13 @@ class _DialogoNuevaCategoriaState extends ConsumerState<DialogoNuevaCategoria> {
       );
       return;
     }
-    await ref.read(categoriasControladorProvider.notifier).agregarCategoria(
-          Categoria(nombre: nombre, tipo: widget.tipo, colorHex: _colorHex, icono: _icono),
-        );
-    if (mounted) Navigator.pop(context, nombre);
+    int? id;
+    final ok = await ejecutarConAviso(context, () async {
+      id = await ref.read(categoriasControladorProvider.notifier).agregar(
+            Categoria(nombre: nombre, tipo: widget.tipo, colorHex: _colorHex, icono: _icono),
+          );
+    });
+    if (ok && mounted) Navigator.pop(context, id);
   }
 
   @override

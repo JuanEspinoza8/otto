@@ -93,6 +93,9 @@ class TemaApp {
   /// Azul para ahorros y balances.
   static const Color azul = Color(0xFF3B82F6);
 
+  /// Alerta de presupuesto (80%).
+  static const Color amarillo = Color(0xFFF59E0B);
+
   /// Color oscuro fijo para elementos que deben verse igual en ambos temas
   /// (ej. el visor de monto del formulario de registro).
   static const Color superficieFijaOscura = Color(0xFF1A1A1C);

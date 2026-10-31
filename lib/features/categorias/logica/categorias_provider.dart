@@ -1,44 +1,30 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import '../../../core/libro/libro_providers.dart';
 import '../modelo/categoria.dart';
 import '../repositorio/categoria_repositorio.dart';
 
-// Es obligatorio generar este archivo ejecutando:
-// flutter pub run build_runner build
 part 'categorias_provider.g.dart';
 
 @riverpod
 class CategoriasControlador extends _$CategoriasControlador {
-  final CategoriaRepositorio _repositorio = CategoriaRepositorio();
-
   @override
-  FutureOr<List<Categoria>> build() async {
-    return await _repositorio.obtenerTodas();
+  Future<List<Categoria>> build() async {
+    ref.watch(versionDatosProvider);
+    return CategoriaRepositorio(await ref.watch(baseDatosProvider.future)).todas();
   }
 
-  /// Agrega una nueva categoría e invalida el estado para forzar la recarga
-  Future<void> agregarCategoria(Categoria categoria) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repositorio.insertar(categoria);
-      return await _repositorio.obtenerTodas();
-    });
-  }
+  /// Crea la categoría y devuelve su id.
+  Future<int> agregar(Categoria categoria) =>
+      escribirEnTransaccion(ref, (txn) => CategoriaRepositorio(txn).insertar(categoria));
 
-  /// Actualiza una categoría existente
-  Future<void> actualizarCategoria(Categoria categoria) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repositorio.actualizar(categoria);
-      return await _repositorio.obtenerTodas();
-    });
-  }
+  Future<void> actualizar(Categoria categoria) =>
+      escribirEnTransaccion(ref, (txn) => CategoriaRepositorio(txn).actualizar(categoria));
 
-  /// Elimina una categoría por su ID
-  Future<void> eliminarCategoria(int id) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() async {
-      await _repositorio.eliminar(id);
-      return await _repositorio.obtenerTodas();
-    });
-  }
+  Future<int> usos(Categoria categoria) async =>
+      CategoriaRepositorio(await ref.read(baseDatosProvider.future)).usos(categoria.id!);
+
+  /// Borra la categoría; sus movimientos y planes pasan a [reasignarA].
+  Future<void> eliminar(Categoria categoria, {int? reasignarA}) => escribirEnTransaccion(
+      ref, (txn) => CategoriaRepositorio(txn).eliminar(categoria.id!, reasignarA: reasignarA));
 }

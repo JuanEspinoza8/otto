@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/tema/tema_app.dart';
 import '../../panel_control/logica/dashboard_provider.dart';
+import '../../../core/ui/acciones.dart';
 import '../logica/categorias_provider.dart';
+import '../logica/presupuesto.dart';
 import '../modelo/categoria.dart';
 import '../../../core/dinero/dinero.dart';
 import '../../../core/dinero/formateador_monto.dart';
@@ -17,9 +19,9 @@ class SeccionPresupuestos extends ConsumerWidget {
     final categorias = ref.watch(categoriasControladorProvider).valueOrNull ?? [];
     // Gastado del mes POR CATEGORÍA, calculado sobre la base (no sobre la lista
     // paginada de 30 movimientos, que subcontaba).
-    final gastosPorId = ref.watch(gastoPorCategoriaIdProvider).valueOrNull ?? {};
+    final gastosPorId = ref.watch(gastosPorCategoriaProvider).valueOrNull ?? const <int, Dinero>{};
 
-    final conLimite = categorias.where((c) => c.tipo == 'gasto' && c.presupuestoLimite > 0).toList();
+    final conLimite = categorias.where((c) => c.esGasto && c.presupuestoLimite.esPositivo).toList();
 
     return Padding(
       padding: const EdgeInsets.all(16.0),
@@ -54,9 +56,15 @@ class SeccionPresupuestos extends ConsumerWidget {
               )
             else
               ...conLimite.map((categoria) {
-                final gastado = gastosPorId[categoria.id] ?? 0.0;
-                final ratio = categoria.presupuestoLimite > 0 ? gastado / categoria.presupuestoLimite : 0.0;
-                final color = ratio > 1.0 ? TemaApp.rojo : TemaApp.verde;
+                final gastado = gastosPorId[categoria.id] ?? const Dinero.cero();
+                final limite = categoria.presupuestoLimite;
+                final ratio = gastado.centavos / limite.centavos;
+                final nivel = nivelPresupuesto(gastado, limite);
+                final color = switch (nivel) {
+                  NivelPresupuesto.normal => TemaApp.verde,
+                  NivelPresupuesto.alerta => TemaApp.amarillo,
+                  NivelPresupuesto.excedido => TemaApp.rojo,
+                };
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
@@ -80,8 +88,17 @@ class SeccionPresupuestos extends ConsumerWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${Dinero.desdeUnidades(gastado).formatear()} de ${Dinero.desdeUnidades(categoria.presupuestoLimite).formatear()}',
-                        style: TextStyle(fontSize: 12, color: context.colores.textoSecundario),
+                        switch (nivel) {
+                          NivelPresupuesto.normal => '${gastado.formatear()} de ${limite.formatear()}',
+                          NivelPresupuesto.alerta => '${gastado.formatear()} de ${limite.formatear()} · cerca del límite',
+                          NivelPresupuesto.excedido =>
+                            '${gastado.formatear()} de ${limite.formatear()} · te pasaste por ${(gastado - limite).formatear()}',
+                        },
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: nivel == NivelPresupuesto.normal ? context.colores.textoSecundario : color,
+                          fontWeight: nivel == NivelPresupuesto.normal ? FontWeight.normal : FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -145,9 +162,9 @@ class _HojaLimites extends ConsumerWidget {
                     contentPadding: EdgeInsets.zero,
                     title: Text(c.nombre, style: TextStyle(color: context.colores.textoPrimario)),
                     trailing: Text(
-                      c.presupuestoLimite > 0 ? Dinero.desdeUnidades(c.presupuestoLimite).formatear() : 'Sin límite',
+                      c.presupuestoLimite.esPositivo ? c.presupuestoLimite.formatear() : 'Sin límite',
                       style: TextStyle(
-                        color: c.presupuestoLimite > 0 ? TemaApp.verde : context.colores.textoSecundario,
+                        color: c.presupuestoLimite.esPositivo ? TemaApp.verde : context.colores.textoSecundario,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -164,9 +181,9 @@ class _HojaLimites extends ConsumerWidget {
 
   Future<void> _editarLimite(BuildContext context, WidgetRef ref, Categoria cat) async {
     final controlador = TextEditingController(
-      text: Dinero.desdeUnidades(cat.presupuestoLimite).textoEditable,
+      text: cat.presupuestoLimite.textoEditable,
     );
-    final nuevo = await showDialog<double>(
+    final nuevo = await showDialog<Dinero>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Límite de ${cat.nombre}', style: TextStyle(color: ctx.colores.textoPrimario)),
@@ -182,26 +199,18 @@ class _HojaLimites extends ConsumerWidget {
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancelar', style: TextStyle(color: ctx.colores.textoSecundario))),
           TextButton(
             onPressed: () {
-              final v = (Dinero.parsear(controlador.text)?.unidades ?? 0);
-              Navigator.pop(ctx, v);
+              Navigator.pop(ctx, Dinero.parsear(controlador.text) ?? const Dinero.cero());
             },
             child: const Text('Guardar', style: TextStyle(color: TemaApp.verde, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
-    if (nuevo != null) {
-      await ref.read(categoriasControladorProvider.notifier).actualizarCategoria(
-            Categoria(
-              id: cat.id,
-              nombre: cat.nombre,
-              tipo: cat.tipo,
-              colorHex: cat.colorHex,
-              icono: cat.icono,
-              presupuestoLimite: nuevo,
-              esSistema: cat.esSistema,
-            ),
-          );
+    if (nuevo != null && context.mounted) {
+      await ejecutarConAviso(
+        context,
+        () => ref.read(categoriasControladorProvider.notifier).actualizar(cat.copiaCon(presupuestoLimite: nuevo)),
+      );
     }
   }
 }
