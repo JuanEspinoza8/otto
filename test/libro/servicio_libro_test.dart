@@ -129,6 +129,11 @@ void main() {
       final cuentas = await consultas.cuentas();
       expect(cuentas.where((c) => c.esMeta).single.archivada, isTrue);
       expect(await consultas.movimientos(filtro: FiltroMovimientos.metas), hasLength(2));
+
+      // Borrar el retiro escondería la plata en la cuenta archivada.
+      final retiro = (await consultas.movimientos(filtro: FiltroMovimientos.metas)).first;
+      await expectLater(libro((l) => l.eliminar(retiro.id!)), throwsA(isA<ErrorLibro>()));
+      expect(await consultas.disponible(), pesos(500000));
     });
 
     test('no se puede borrar un aporte cuya plata ya salió de la meta', () async {

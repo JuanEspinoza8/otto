@@ -24,23 +24,29 @@ class SeccionRespaldo extends ConsumerWidget {
   }
 
   Future<void> _importar(BuildContext context, WidgetRef ref) async {
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('¿Importar un respaldo?'),
-        content: const Text(
-          'Se reemplazan todos los datos actuales por los del archivo. Antes se guarda una copia de la base actual en el teléfono.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Importar', style: TextStyle(color: TemaApp.rojo))),
-        ],
-      ),
-    );
-    if (confirmar != true || !context.mounted) return;
+    final controlador = ref.read(respaldoControladorProvider.notifier);
     try {
-      final importado = await ref.read(respaldoControladorProvider.notifier).importar();
-      if (importado && context.mounted) _avisar(context, 'Datos restaurados correctamente');
+      // Primero se lee y valida el archivo, sin tocar nada.
+      final respaldo = await controlador.elegir();
+      if (respaldo == null || !context.mounted) return;
+      final confirmar = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('¿Reemplazar tus datos?'),
+          content: Text(
+            'El respaldo tiene ${respaldo.movimientos} movimientos, ${respaldo.metas} metas y '
+            '${respaldo.planes} fijos, cuotas o sueldo. Hoy tenés ${respaldo.movimientosActuales} movimientos.\n\n'
+            'Se reemplaza todo por el respaldo. Antes se guarda una copia de la base actual en el teléfono.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')),
+            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reemplazar', style: TextStyle(color: TemaApp.rojo))),
+          ],
+        ),
+      );
+      if (confirmar != true || !context.mounted) return;
+      await controlador.restaurar(respaldo);
+      if (context.mounted) _avisar(context, 'Datos restaurados correctamente');
     } on ErrorRespaldo catch (e) {
       if (context.mounted) _avisar(context, '${e.mensaje}. No se cambió nada.', error: true);
     } catch (_) {
@@ -68,7 +74,7 @@ class SeccionRespaldo extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.file_download, color: Colors.orange),
             title: const Text('Importar respaldo'),
-            subtitle: const Text('Reemplaza los datos actuales por los del archivo', style: TextStyle(fontSize: 12)),
+            subtitle: const Text('Muestra qué trae el archivo antes de reemplazar los datos', style: TextStyle(fontSize: 12)),
             onTap: () => _importar(context, ref),
           ),
         ],

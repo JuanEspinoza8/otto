@@ -64,11 +64,16 @@ class AppErrorBase extends StatelessWidget {
     final mensajero = ScaffoldMessenger.of(context);
     final ruta = await GestorBaseDatos.instancia.rutaArchivo();
     final copia = File(p.join(p.dirname(ruta), GestorBaseDatos.nombreRespaldoV8));
-    final archivo = await copia.exists() ? copia : File(ruta);
-    if (!await archivo.exists()) {
+    final principal = await copia.exists() ? copia : File(ruta);
+    if (!await principal.exists()) {
       mensajero.showSnackBar(const SnackBar(content: Text('No se encontró la copia')));
       return;
     }
-    await Share.shareXFiles([XFile(archivo.path)], text: 'Copia de la base de Otto');
+    // La base puede tener cambios en sus archivos -wal o -journal.
+    final archivos = [
+      for (final f in [principal, File('${principal.path}-wal'), File('${principal.path}-journal')])
+        if (await f.exists()) XFile(f.path),
+    ];
+    await Share.shareXFiles(archivos, text: 'Copia de la base de Otto');
   }
 }

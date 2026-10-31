@@ -157,5 +157,11 @@ void main() {
     sueldo = (await ServicioPlanes(db).sueldo())!;
     expect(sueldo.monto, pesos(900000));
     expect(sueldo.activo, isFalse);
+
+    // Al volver de la pausa no aparecen como pendientes los meses pausados.
+    await planes((p) => p.fijarSueldo(pesos(950000), hoy: DateTime.now()));
+    sueldo = (await ServicioPlanes(db).sueldo())!;
+    expect(sueldo.activo, isTrue);
+    expect(sueldo.primerPeriodo, Periodo.de(DateTime.now()));
   });
 }

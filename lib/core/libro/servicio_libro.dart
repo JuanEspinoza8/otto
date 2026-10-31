@@ -135,6 +135,11 @@ class ServicioLibro {
   /// que retirarla o moverla de vuelta antes.
   Future<void> eliminar(int id) async {
     final m = await movimiento(id);
+    for (final cuentaId in [m.cuentaId, if (m.cuentaDestinoId != null) m.cuentaDestinoId!]) {
+      if ((await cuenta(cuentaId)).archivada) {
+        throw const ErrorLibro('Es de una meta eliminada: si se borra, esa plata quedaría escondida');
+      }
+    }
     await _db.delete('movimientos', where: 'id = ?', whereArgs: [id]);
     final entra = m.esTransferencia ? m.cuentaDestinoId : (m.esIngreso || m.tipo == TipoMovimiento.saldoInicial ? m.cuentaId : null);
     if (entra != null && (await cuenta(entra)).esMeta && (await saldo(entra)).esNegativo) {

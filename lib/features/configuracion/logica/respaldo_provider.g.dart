@@ -7,14 +7,15 @@ part of 'respaldo_provider.dart';
 // **************************************************************************
 
 String _$respaldoControladorHash() =>
-    r'32434e48ed6aaa6f9fccfbf91f7d9a38af47bdc6';
+    r'f48807d16b8dea85f651ff6e76b0d51c08ad83f0';
 
-/// Exportar e importar el respaldo desde Configuración.
+/// Exportar e importar el respaldo desde Configuración. Se mantiene vivo
+/// mientras el usuario confirma la importación.
 ///
 /// Copied from [RespaldoControlador].
 @ProviderFor(RespaldoControlador)
 final respaldoControladorProvider =
-    AutoDisposeNotifierProvider<RespaldoControlador, void>.internal(
+    NotifierProvider<RespaldoControlador, void>.internal(
   RespaldoControlador.new,
   name: r'respaldoControladorProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -24,6 +25,6 @@ final respaldoControladorProvider =
   allTransitiveDependencies: null,
 );
 
-typedef _$RespaldoControlador = AutoDisposeNotifier<void>;
+typedef _$RespaldoControlador = Notifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

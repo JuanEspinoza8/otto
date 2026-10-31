@@ -18,8 +18,21 @@ import 'servicio_respaldo.dart';
 
 part 'respaldo_provider.g.dart';
 
-/// Exportar e importar el respaldo desde Configuración.
-@riverpod
+/// Un respaldo leído y validado, listo para restaurar.
+class RespaldoElegido {
+  const RespaldoElegido({required this.datos, required this.movimientosActuales});
+
+  final Map<String, List<Map<String, Object?>>> datos;
+  final int movimientosActuales;
+
+  int get movimientos => datos['movimientos']!.length;
+  int get metas => datos['metas']!.length;
+  int get planes => datos['planes']!.length;
+}
+
+/// Exportar e importar el respaldo desde Configuración. Se mantiene vivo
+/// mientras el usuario confirma la importación.
+@Riverpod(keepAlive: true)
 class RespaldoControlador extends _$RespaldoControlador {
   @override
   void build() {}
@@ -39,12 +52,12 @@ class RespaldoControlador extends _$RespaldoControlador {
     }
   }
 
-  /// Reemplaza los datos por los de un respaldo elegido por el usuario.
-  /// Devuelve false si se canceló. Antes copia la base actual.
-  Future<bool> importar() async {
+  /// Elige un archivo, lo valida (y si es de la versión anterior lo
+  /// convierte) sin tocar los datos. Null si se canceló.
+  Future<RespaldoElegido?> elegir() async {
     final elegido = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['json']);
     final ruta = elegido?.files.single.path;
-    if (ruta == null) return false;
+    if (ruta == null) return null;
 
     final db = await ref.read(baseDatosProvider.future);
     final temporal = Directory(p.join((await getTemporaryDirectory()).path, 'importacion'));
@@ -67,18 +80,27 @@ class RespaldoControlador extends _$RespaldoControlador {
         );
       },
     );
+    final actuales = await db.rawQuery('SELECT COUNT(*) AS n FROM movimientos');
+    return RespaldoElegido(datos: datos, movimientosActuales: actuales.first['n'] as int);
+  }
 
-    // Copia de la base actual por si el respaldo no era el correcto.
+  /// Reemplaza los datos por los del respaldo. Antes guarda una copia con
+  /// fecha de la base actual (no pisa copias anteriores).
+  Future<void> restaurar(RespaldoElegido respaldo) async {
+    final db = await ref.read(baseDatosProvider.future);
+    // Si la base usa WAL, el checkpoint pasa todo al archivo principal antes
+    // de copiarlo; en modo journal no hace nada.
+    await db.rawQuery('PRAGMA wal_checkpoint(TRUNCATE)');
     final actual = File(await GestorBaseDatos.instancia.rutaArchivo());
     if (await actual.exists()) {
-      await actual.copy(p.join(actual.parent.path, 'finanzas_antes_de_importar.db'));
+      final marca = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
+      await actual.copy(p.join(actual.parent.path, 'finanzas_antes_de_importar_$marca.db'));
     }
 
-    await ServicioRespaldo.restaurar(db, datos);
+    await ServicioRespaldo.restaurar(db, respaldo.datos);
     ref.read(versionDatosProvider.notifier).cambiaron();
     try {
       await ServicioNotificaciones.reprogramarFijos(await ServicioPlanes(db).planes(tipo: TipoPlan.fijo));
     } catch (_) {/* un fallo de notificaciones no invalida la importación */}
-    return true;
   }
 }

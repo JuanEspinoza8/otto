@@ -92,6 +92,12 @@ class ServicioPlanes {
       ..remove('id')
       ..remove('tipo')
       ..remove('primer_periodo');
+    // Un sueldo o un fijo que vuelve de una pausa arranca este mes: los meses
+    // en pausa no aparecen como pendientes. Las cuotas conservan su inicio.
+    if (!actual.activo && plan.activo && !plan.esCuotas) {
+      final hoy = Periodo.de(DateTime.now());
+      if (actual.primerPeriodo < hoy) fila['primer_periodo'] = hoy.toString();
+    }
     await _db.update('planes', fila, where: 'id = ?', whereArgs: [plan.id]);
   }
 
@@ -123,12 +129,11 @@ class ServicioPlanes {
       ));
       return;
     }
-    await _db.update(
-      'planes',
-      monto.esPositivo ? {'monto_centavos': monto.centavos, 'activo': 1} : {'activo': 0},
-      where: 'id = ?',
-      whereArgs: [actual.id],
-    );
+    if (!monto.esPositivo) {
+      await _db.update('planes', {'activo': 0}, where: 'id = ?', whereArgs: [actual.id]);
+      return;
+    }
+    await actualizar(actual.copiaCon(monto: monto, activo: true));
   }
 
   // ---------------------------------------------------------------------------
